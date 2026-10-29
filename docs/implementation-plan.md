@@ -4,7 +4,7 @@
 
 ### 1.1 目标
 
-在当前工作区实现一个独立的 DSH 插件包 `@moguiyu/dsh-exa`，参考现有 `@moguiyu/dsh-tavily` 的 Host/Client 结构，提供：
+在当前工作区实现一个独立的 DSH 插件包 `dsh-exa`，参考现有 `@moguiyu/dsh-tavily` 的 Host/Client 结构，提供：
 
 1. 三个直接暴露给 DSH Agent 的工具：`exa_search`、`exa_search_advanced`、`exa_fetch`。
 2. 一个位于 **Plugins 插件管理页面、插件详情区域** 的管理卡片。
@@ -34,7 +34,7 @@
 - Host `tools.register(definition)` 返回工具注销函数；`ToolDefinition` 支持 canonical `output.schema`、`output.render`、`timeoutMs` 和并发安全声明。
 - credentials 的 `resolve` 应在每次操作时重新调用；`describe` 返回来源和 `writable`；`set` / `unset` 管理可写存储。
 - `systemPrompt.section`、`webServer.register` 和 Client slot 注册均具有可清理的生命周期。
-- Client slot `plugins.bundle.config` 是 keyed slot，注册 key 使用包名 `@moguiyu/dsh-exa`。卡片由插件详情页在描述和 rows 之间渲染，props 使用 `view: 'summary' | 'page'`。
+- Client slot `plugins.bundle.config` 是 keyed slot，注册 key 使用包名 `dsh-exa`。卡片由插件详情页在描述和 rows 之间渲染，props 使用 `view: 'summary' | 'page'`。
 - Exa 官方接口：
   - Search：`POST https://api.exa.ai/search`，文档 <https://docs.exa.ai/reference/search>。
   - Contents：`POST https://api.exa.ai/contents`，文档 <https://docs.exa.ai/reference/contents-api-guide-for-coding-agents>。
@@ -43,6 +43,7 @@
   - 按 key 用量：`GET /api-keys/{id}/usage`，文档 <https://exa.ai/docs/reference/team-management/get-api-key-usage.md>。
 - Team Management API 按团队开通，使用从 API keys 页面 Service keys 标签创建的 service account API key。普通搜索 key 不能替代它；service key 与目标 API key 必须属于同一团队。
 - 用量接口默认返回最近 30 天的 `total_cost_usd` 和 `cost_breakdown`，支持自定义 `start_date` / `end_date`，最早可查 180 天。key 列表返回 `id`、`name`、`rateLimit`、`budgetCents` 和 `isOverBudget`。
+- 官方 [Error Codes](https://exa.ai/docs/admin/error-codes) 未列出 432/433；402 表示 credits 耗尽或 key/team 预算超限，错误响应可含 `requestId`、`error` 和 `tag`。
 
 ## 3. 包结构与职责
 
@@ -154,11 +155,11 @@ docs/implementation-plan.md  本文档
 
 共同规则：
 
-1. HTTP 401 和 429 才触发换 key；每个不同 key 在一次工具调用中最多尝试一次。
-2. 400、402 及其他非 401/429 响应直接返回错误，不盲目遍历 key。
+1. HTTP 401、402 和 429 触发换 key；每个不同 key 在一次工具调用中最多尝试一次。402 覆盖 Exa 的 credits 耗尽与 key/team 预算超限场景。
+2. 400、403、422 及其他非 401/402/429 响应直接返回错误，不盲目遍历 key。Exa 官方未定义 432/433，因此不设置对应分支。
 3. 超时、调用方取消和网络错误不通过更换 key 重试。
 4. `round-robin` 在调用开始时快照游标和当前列表，避免并发调用读取到同一个不断变化的位置。
-5. 所有 key 均失败时返回汇总错误，不包含 secret。
+5. 所有 key 均失败时返回汇总错误，不包含 secret；保留最后一次响应中的 `requestId`、`tag` 和 `error`，并提示团队级 credits/预算问题可能无法通过同团队的其他 key 解决。
 6. 卡片保存新顺序后，下一次工具调用立即使用新顺序，无需重启。
 7. 不根据 `costDollars` 或 Admin API 历史用量自动排序；前者是单次请求估计，后者用于管理卡片展示，手动顺序只能由用户修改。
 
@@ -167,7 +168,7 @@ docs/implementation-plan.md  本文档
 ### 6.1 注册位置
 
 - slot：`plugins.bundle.config`。
-- key / id：`@moguiyu/dsh-exa`。
+- key / id：`dsh-exa`。
 - `summary`：一句插件配置说明。
 - `page`：完整管理表单，由 Plugins 页面提供标题、图标和布局容器。
 - 不注册 `conversation.*`、主侧栏、独立 panel 或 `shell.overlay`。
@@ -243,7 +244,7 @@ Host 入口声明所需的 `tools`、`webServer`、`credentials`、`systemPrompt
 - 响应投影与 output schema 校验，包括可选字段和错误状态。
 - key 列表解析、去重、掩码、序列化、首 key 同步。
 - `priority` 的固定起始顺序和 `round-robin` 的游标行为。
-- 401/429 故障切换、每个 key 最多一次、全部失败、非轮换错误和取消。
+- 401/402/429 故障切换、402 错误 tag 保留、每个 key 最多一次、全部失败、非轮换错误和取消。
 - 并发调用下的起始 key 快照。
 - reorder 的 ID 集合校验和只读凭据拒绝路径。
 - Admin key 列表、预算字段、零用量、费用分项和时间范围的响应映射。
@@ -262,7 +263,7 @@ Host 入口声明所需的 `tools`、`webServer`、`credentials`、`systemPrompt
 
 ### 8.3 卡片与浏览器验收
 
-- 卡片只出现在 Plugins → `@moguiyu/dsh-exa` 详情页，主界面侧栏无新增入口。
+- 卡片只出现在 Plugins → `dsh-exa` 详情页，主界面侧栏无新增入口。
 - 新增、reveal、替换、删除和策略保存后重新加载仍正确。
 - 配置有效 service key 后，同一表格展示多个 key 的预算、超预算状态和时间段用量；未配置时显示设置提示而不遮挡排序功能。
 - 修改时间范围、展开分项用量、手动关联 key 和刷新用量均正确；单 key 失败不阻塞其他行。
@@ -296,7 +297,7 @@ Team Management smoke test 仅使用 GET，不创建、修改或删除远程 key
 2. search、高级 search、fetch 分别正确调用 Exa `/search` 与 `/contents`，canonical JSON 通过 schema 校验。
 3. 内置 web 工具和现有 MCP Exa 配置不被修改。
 4. 多 key 的增删改查、显式 reveal 和只读环境行为符合设计，日志不泄露 secret。
-5. `priority` 与 `round-robin` 行为有自动化测试，401/429 按规则切换。
+5. `priority` 与 `round-robin` 行为有自动化测试，401/402/429 按规则切换。
 6. 配置有权限的 service key 后，用户可在同一界面看到多个 key 的预算、超预算状态和时间段用量；无权限或未配置时降级为明确提示。
 7. 用户可在 Plugins 详情页通过拖动或按钮调整顺序；保存、刷新和下一次调用均保持该顺序，用量刷新不会自动改变顺序。
 8. 卡片不在主界面侧栏创建入口，插件卸载后无工具、路由、prompt、缓存任务或 slot 残留。
