@@ -1,0 +1,74 @@
+# Dependencies and package-manager caches.
+node_modules/
+.pnpm-store/
+.npm/
+
+# Local build leftovers. lib/client.js is the published browser artifact and is
+# intentionally tracked; do not ignore lib/.
+/dist/
+.client-build/
+*.tgz
+
+# Local research notes and downloaded specifications.
+.research/
+.dsh-source/
+
+# Local environment, credentials, and private key material.
+.env
+.env.*
+!.env.example
+.credentials.yaml
+.credentials.*.yaml
+*.local
+*.key
+*.pem
+*.p12
+*.pfx
+*.secrets
+
+# Local DSH state, sessions, and verification homes.
+.dsh/
+.dsh-*/
+.dsh-home/
+.dsh-report/
+
+# Logs and test/coverage artifacts.
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+coverage/
+.nyc_output/
+*.lcov
+test-results/
+playwright-report/
+.tmp/
+*.tmp
+.cache/
+.eslintcache
+*.tsbuildinfo
+.vite/
+
+# OS and editor files.
+.DS_Store
+._*
+.AppleDouble
+.LSOverride
+.Spotlight-V100
+.Trashes
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+*.swp
+*.swo
+*~
+*.orig
+*.rej
+.idea/
+.vscode/
+*.code-workspace
+
+# Lockfiles are not ignored: commit the package-manager lockfile when one is
+# generated.

@@ -1,0 +1,91 @@
+import assert from 'node:assert/strict'
+import { execFileSync } from 'node:child_process'
+import { readFileSync, statSync } from 'node:fs'
+import { join } from 'node:path'
+import { test } from 'node:test'
+
+const root = process.cwd()
+const read = (path) => readFileSync(join(root, path), 'utf8')
+const json = (path) => JSON.parse(read(path))
+
+test('package manifest declares the bundle, client, and display resources', () => {
+  const pkg = json('package.json')
+  assert.equal(pkg.name, 'dsh-exa')
+  assert.equal(pkg.type, 'module')
+  assert.equal(pkg.exports['.'], './src/index.js')
+  assert.equal(pkg.exports['./client'], './lib/client.js')
+  assert.equal(pkg.exports['./icon'], './icon.svg')
+  assert.equal(pkg.exports['./locale/*.json'], './locale/*.json')
+  assert.equal(pkg.dsh.bundle.patch, './cordis.patch.yml')
+  assert.equal(pkg.dsh.client.platform, 'web')
+  assert.ok(pkg.dsh.client.inject.includes('@deepseek-ai/dsh-client-ui-plugin-manager'))
+  assert.ok(pkg.files.includes('lib'))
+  assert.ok(pkg.files.includes('docs'))
+  assert.ok(pkg.files.includes('cordis.patch.yml'))
+  assert.ok(pkg.files.includes('icon.svg'))
+  assert.match(pkg.engines.node, />=22/u)
+})
+
+test('cordis patch inserts exactly one dsh-exa row', () => {
+  const patch = read('cordis.patch.yml')
+  assert.match(patch, /id: dsh-exa/u)
+  assert.match(patch, /name: 'dsh-exa'/u)
+  assert.equal((patch.match(/id: dsh-exa/gu) || []).length, 1)
+})
+
+test('locale metadata is bilingual and card dictionaries have identical key sets', () => {
+  const en = json('locale/en.json')
+  const zh = json('locale/zh.json')
+  assert.equal(typeof en.meta.title, 'string')
+  assert.equal(typeof en.meta.description, 'string')
+  assert.equal(typeof zh.meta.title, 'string')
+  assert.equal(typeof zh.meta.description, 'string')
+  assert.notEqual(en.meta.title, zh.meta.title)
+  const enKeys = Object.keys(en.card).sort()
+  const zhKeys = Object.keys(zh.card).sort()
+  assert.deepEqual(enKeys, zhKeys)
+  assert.ok(enKeys.length > 100)
+  for (const key of ['summary', 'keys.title', 'usage.title', 'service.title', 'footer']) {
+    assert.equal(typeof en.card[key], 'string')
+    assert.equal(typeof zh.card[key], 'string')
+    assert.ok(en.card[key].length > 0)
+    assert.ok(zh.card[key].length > 0)
+  }
+})
+
+test('icon is a small local SVG image', () => {
+  const icon = read('icon.svg')
+  assert.match(icon, /^<svg /u)
+  assert.match(icon, /width="24"/u)
+  assert.match(icon, /height="24"/u)
+  assert.ok(statSync(join(root, 'icon.svg')).size < 256 * 1024)
+})
+
+test('the source client contains the build placeholder and the built bundle replaced it', () => {
+  const source = read('src/client.js')
+  assert.match(source, /const DICTS = __UI_DICTS__/u)
+  assert.ok((source.match(/__UI_DICTS__/gu) || []).length >= 1)
+  const built = read('lib/client.js')
+  assert.match(built, /^window\.__ModuleLoader__\.load\(/u)
+  assert.match(built, /id: "dsh-exa"/u)
+  assert.equal(built.includes('__UI_DICTS__'), false)
+  assert.equal(built.includes('export '), false)
+})
+
+test('all JavaScript source files pass node --check', () => {
+  for (const file of [
+    'src/index.js',
+    'src/lib.js',
+    'src/state.js',
+    'src/key-manager.js',
+    'src/exa-client.js',
+    'src/usage.js',
+    'src/tools.js',
+    'src/backend.js',
+    'src/client.js',
+    'lib/client.js',
+    'scripts/build-client.mjs',
+  ]) {
+    execFileSync(process.execPath, ['--check', join(root, file)], { stdio: 'pipe' })
+  }
+})
