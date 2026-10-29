@@ -86,7 +86,7 @@ That confirms the installed Host tool is reachable through the PTC surface. The 
 - `writable: { list: true, primary: true, add: true, edit: true }`
 - no `serviceKey` field
 
-The old `/api/exa-usage` route is not registered by the plugin. Requests to it now receive the server's generic unknown-API response (`401 unauthorized`), the same as an arbitrary `/api/nope` path; no plugin handler or Admin API call runs.
+The old `/api/exa-usage` route is not registered by the plugin; the Host test asserts that only `/api/exa-manager` is present. In the unauthenticated live probe, `/api/exa-usage` received the same `401 unauthorized` response as an arbitrary `/api/nope` path, so no plugin handler or Admin API call ran.
 
 The installed `lib/client.js` contains `https://dashboard.exa.ai/billing` and does not contain `/api/exa-usage`. The Billing button opens that URL in a new tab.
 
