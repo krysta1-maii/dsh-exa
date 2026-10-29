@@ -1,6 +1,6 @@
 /**
- * Non-secret manager state: routing strategy, display timestamps, and the
- * local-key-to-Admin-key associations. Key values are never written here.
+ * Non-secret manager state: routing strategy and display timestamps. Key
+ * values are never written here.
  */
 import { chmodSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
@@ -15,8 +15,6 @@ export function defaultManagerState() {
     version: STATE_VERSION,
     strategy: 'priority',
     keySavedAt: {},
-    adminKeyIds: {},
-    serviceKeySavedAt: null,
     updatedAt: null,
   }
 }
@@ -47,8 +45,6 @@ export function normalizeManagerState(value) {
     version: STATE_VERSION,
     strategy: value.strategy === 'round-robin' ? 'round-robin' : 'priority',
     keySavedAt: stringMap(value.keySavedAt),
-    adminKeyIds: stringMap(value.adminKeyIds),
-    serviceKeySavedAt: typeof value.serviceKeySavedAt === 'string' ? value.serviceKeySavedAt : null,
     updatedAt: typeof value.updatedAt === 'string' ? value.updatedAt : null,
   }
 }
@@ -95,7 +91,6 @@ export function updateManagerState(mutator) {
   const draft = {
     ...current,
     keySavedAt: { ...current.keySavedAt },
-    adminKeyIds: { ...current.adminKeyIds },
   }
   const next = mutator(draft)
   return writeManagerState(next === undefined ? draft : next)

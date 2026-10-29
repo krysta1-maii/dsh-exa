@@ -1,13 +1,13 @@
 # dsh-exa
 
-Exa tools and a Plugins-page management card for DeepSeek Harness. The package adds three model tools — `exa_search`, `exa_search_advanced`, and `exa_fetch` — backed by an ordered multi-key client with priority or round-robin routing. It also adds a card on the **Plugins** page for key management, routing strategy, optional Team Management budgets and usage, and drag or button ordering.
+Exa tools and a Plugins-page management card for DeepSeek Harness. The package adds three model tools — `exa_search`, `exa_search_advanced`, and `exa_fetch` — backed by an ordered multi-key client with priority or round-robin routing. It also adds a card on the **Plugins** page for key management, routing strategy, drag or button ordering, and a button that opens the Exa Billing dashboard.
 
 The built-in `web_search` and `web_fetch` tools are not replaced. This package never registers a web search provider and never changes `ctx.web`.
 
 - Package name: `dsh-exa`
 - Bundle patch row: `dsh-exa`
 - Target runtime: DeepSeek Harness 0.2.1-rc.3, Node.js 22 or newer
-- First release: 0.1.0
+- Current release: 0.2.0
 
 ## Install
 
@@ -27,7 +27,6 @@ The package has no install scripts. Its peer dependencies are the DSH packages a
 | --- | --- |
 | `EXA_API_KEYS` | Ordered, comma-separated key list. When non-empty this is the authoritative source. |
 | `EXA_API_KEY` | Single-key fallback. When the list is empty, this key is used. The card keeps it in step with the first list item when the variable is writable. |
-| `EXA_SERVICE_API_KEY` | Optional Team Management service account key. It is used only for Admin API reads, never for search or contents calls. |
 
 The environment that launches `dsh` owns its variables read-only. A read-only key cannot be changed from the card; the card says so and disables the relevant controls. Editable keys live in the provider-managed credential store and can be managed from the card or in `~/.dsh/.credentials.yaml`.
 
@@ -95,30 +94,23 @@ The canonical output keeps each page's URL, ID, title, author, publication date,
 
 The round-robin cursor advances once per tool call and resets when the process restarts. The key order itself is persisted only in the credential list. The card never sends continuous writes while dragging; it edits a local draft and sends one `reorder` request when **Save order** is pressed. Up and down buttons produce the same draft changes for keyboard and no-drag environments.
 
-The card does not reorder keys from usage history or from `costDollars`. Only an explicit user action changes the order.
+The card does not reorder keys from `costDollars`. Only an explicit user action changes the order.
 
-## Team Management
+## Billing
 
-Team Management is enabled per Exa team. Create a service account key from the **Service keys** tab of the Exa API keys page, then paste it into the service-key section of the card. If the feature is not enabled for the team, or the key lacks permission, the usage area shows the failure and key management/ordering continue to work.
+The card includes an **Open Exa Billing** button that opens <https://dashboard.exa.ai/billing> in a new tab. Exa keeps credit balance, invoices, and auto recharge in that dashboard.
 
-The usage route performs only `GET` Admin API calls:
+The plugin does not query or display the team credit balance. Exa's public API has no balance or credit endpoint; the Team Management API that exposes per-key usage and budgets does not return the remaining team balance. The card therefore avoids presenting an approximate number as an account balance.
 
-- `GET /api-keys` for team key names, rate limits, budget cents, and `isOverBudget`.
-- `GET /api-keys/{id}/usage` for the selected date range.
-
-Budget applies to the team's current billing period. Cost applies to the selected date range. The card shows them side by side and does not derive remaining budget or team credit balance. The default range is the last 30 days; a start date older than 180 days is rejected, as are reversed and malformed ranges.
-
-The card links each local key to a team key by stable local fingerprint. The Admin API does not return normal key material, so linking is normally a one-time manual selection from the team key list. The association is stored as non-secret metadata. Each row can fail independently: a missing service key, an unauthorized service key, an unlinked local key, a removed team key, or one failed usage call does not block the other rows or key management.
-
-Usage responses are cached for about 60 seconds and identical in-flight queries are merged. `refresh=1` bypasses the cache. The cache is owned by the plugin installation and cleared on unload.
+Each Exa response still carries `costDollars` for the individual request. The tools pass that field through as an estimate, not as a billing record. Historical usage and per-key budgets remain available in the Exa dashboard.
 
 ## Security and state
 
-- Full normal keys and the service key are returned only by an explicit reveal request. Every management response uses `Cache-Control: no-store`.
-- Neither key values nor Authorization headers are written to logs. Ordering and association requests use local fingerprints; add and replace necessarily send the supplied key value to the local Host route over the same-origin channel.
-- The manager state is `~/.dsh/exa-manager.json`, written atomically with mode `0600` where the platform supports it. It contains the routing strategy, display timestamps, and local-key-to-Admin-key associations; it contains no secrets.
+- Full normal keys are returned only by an explicit reveal request. Every management response uses `Cache-Control: no-store`.
+- Neither key values nor Authorization headers are written to logs. Ordering requests use local fingerprints; add and replace necessarily send the supplied key value to the local Host route over the same-origin channel.
+- The manager state is `~/.dsh/exa-manager.json`, written atomically with mode `0600` where the platform supports it. It contains the routing strategy and display timestamps; it contains no secrets.
 - `EXA_API_KEYS` is authoritative. The card does not merge `EXA_API_KEY` back into the list, which would resurrect a removed key. A delete that would fall back to an inherited read-only primary is refused with an explanation.
-- The routes are served by the local DSH web server. This package does not add CORS headers or a second server.
+- The management route is served by the local DSH web server. This package does not add CORS headers or a second server.
 - Key management, reveal, replacement, deletion, and ordering are user-only card operations. They are not exposed as Agent tools.
 
 ## Package layout
@@ -129,8 +121,7 @@ Usage responses are cached for about 60 seconds and identical in-flight queries 
 | `src/tools.js` | Three tool definitions, validation, request mapping, projections, render |
 | `src/exa-client.js` | Exa HTTP transport, error classification, failover |
 | `src/key-manager.js` | Credential reads/writes, key metadata, primary synchronization |
-| `src/usage.js` | Team Management reads, cache, and in-flight merging |
-| `src/backend.js` | `/api/exa-manager` and `/api/exa-usage` |
+| `src/backend.js` | `/api/exa-manager` |
 | `src/lib.js` | Pure parsing, masking, ordering, URL/date validation |
 | `src/state.js` | Non-secret manager state |
 | `src/client.js` | Card source, serialized by the build script |
@@ -154,30 +145,28 @@ The client build replaces the `__UI_DICTS__` placeholder inside `factory` with t
 
 Verification was performed on 2026-10-29 against DSH `0.2.1-rc.3` in the Web profile.
 
-- The bundle installed with `application: applied`, package version `0.1.0`.
+- The bundle installed with `application: applied`, package version `0.2.0`.
 - The Host tool catalog contains exactly three new native tools: `exa_search`, `exa_search_advanced`, and `exa_fetch`. Existing `web_search` and `web_fetch` remain present; this package registers no web provider and does not touch `ctx.web`.
 - The client slot `plugins.bundle.config` has an active `dsh-exa` occupant.
-- Live route probes returned HTTP 200 with `content-type: application/json` and `cache-control: no-store`. The manager route reported one key from `EXA_API_KEY`, priority routing, and no service key. The usage route returned `configured: false` with an explanatory message, as designed.
+- The manager route returned HTTP 200 with `content-type: application/json` and `cache-control: no-store`, reporting one key from `EXA_API_KEY` and priority routing. The removed usage route is no longer registered.
 - A PTC dispatch of `exa_search` with an empty query reached the registered tool and returned the validation error `query must be a non-empty string`, confirming that the installed tool is callable through the PTC surface.
-- `node --test` passes 66 test cases across pure helpers, request mapping, failover, round-robin cursor behavior, read-only credentials, state permissions, manager actions, usage mapping, caching, client bundle construction and freshness, and Host mount/unmount lifecycle.
+- `node --test` passes 52 test cases across pure helpers, request mapping, failover, round-robin cursor behavior, read-only credentials, state permissions, manager actions, client bundle construction and freshness, and Host mount/unmount lifecycle.
 
 Not verified live:
 
 - Successful calls to the real Exa Search/Contents API were not executed because they consume the configured key's credits and no explicit cost approval was given. Success paths are covered by mock-fetch tests, including schema validation of the canonical outputs.
-- Team Management was not called against the real Admin API because no service key is configured in this profile. The adapter, range validation, mapping, cache, and failure paths are covered by mocks.
-- Visual browser verification (light/dark, narrow width, drag interaction, console) was not available in this environment. Slot registration is active; the built bundle was executed with a stub React runtime in tests.
-- Live unload/reload was not repeated after the installation because the session's approval policy changed to reject plugin-manager actions. Host mount/unmount and route/tool/prompt disposers are covered by tests.
+- Visual browser verification (light/dark, narrow width, drag interaction, the Billing button's new tab, console) was not available in this environment. Slot registration is active; the built bundle was executed with a stub React runtime in tests.
+- A full Harness process restart was not performed; the old bundle was removed and the updated bundle installed in the live profile. Host mount/unmount and route/tool/prompt disposers are covered by tests.
 
 See [docs/verification.md](./docs/verification.md) for the recorded checks and limits.
 
 ## Non-goals
 
-This first release intentionally does not include Exa Agent, Research, or `agent_run`; Tavily-style `map` and `crawl` tools; team credit balance; automatic key reordering from usage history; a replacement for the built-in web tools; automatic disabling of an existing MCP Exa server; or Agent-facing key-management tools.
+This release intentionally does not include Exa Agent, Research, or `agent_run`; Tavily-style `map` and `crawl` tools; a team credit-balance query; per-key usage history inside the card; automatic key reordering from usage history; a replacement for the built-in web tools; automatic disabling of an existing MCP Exa server; or Agent-facing key-management tools.
 
 ## References
 
 - Exa Search: <https://docs.exa.ai/reference/search>
 - Exa Contents: <https://docs.exa.ai/reference/contents-api-guide-for-coding-agents>
-- Team Management OpenAPI: <https://exa.ai/docs/team-management-spec.yaml>
-- Get API key usage: <https://exa.ai/docs/reference/team-management/get-api-key-usage.md>
-- List API keys: <https://exa.ai/docs/reference/team-management/list-api-keys.md>
+- Exa Billing: <https://exa.ai/docs/admin/billing>
+- Exa Billing dashboard: <https://dashboard.exa.ai/billing>

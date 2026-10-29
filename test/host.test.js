@@ -24,10 +24,10 @@ function unmount(mounted) {
   }
 }
 
-test('Host apply registers three tools, two routes, and one prompt section', () => {
+test('Host apply registers three tools, one route, and one prompt section', () => {
   const mounted = mount()
   assert.deepEqual([...mounted.tools.keys()].sort(), ['exa_fetch', 'exa_search', 'exa_search_advanced'])
-  assert.deepEqual([...mounted.routes.keys()].sort(), ['/api/exa-manager', '/api/exa-usage'])
+  assert.deepEqual([...mounted.routes.keys()].sort(), ['/api/exa-manager'])
   assert.deepEqual([...mounted.sections.keys()], ['tool:exa'])
   assert.equal(mounted.sections.get('tool:exa').order, 111)
   unmount(mounted)
@@ -41,7 +41,7 @@ test('Host can be mounted again after a clean unmount without duplicate registra
   unmount(first)
   const second = mount()
   assert.equal(second.tools.size, 3)
-  assert.equal(second.routes.size, 2)
+  assert.equal(second.routes.size, 1)
   assert.equal(second.sections.size, 1)
   unmount(second)
 })

@@ -3,7 +3,6 @@ import { test } from 'node:test'
 
 import {
   clampInt,
-  dateOnlyFromMs,
   dedupe,
   integerArg,
   keyId,
@@ -17,9 +16,7 @@ import {
   requiredHttpUrls,
   reorderByIds,
   selectKeyOrder,
-  serviceId,
   truncateText,
-  validateUsageRange,
 } from '../src/lib.js'
 
 const A = 'exa_aaaaaaaaaaaaaaaaaaaaaaaaaaaa'
@@ -47,7 +44,6 @@ test('stable IDs are non-secret and distinct', () => {
   assert.equal(keyId(A), keyId(A))
   assert.notEqual(keyId(A), keyId(B))
   assert.match(keyId(A), /^k_[0-9a-f]{16}$/u)
-  assert.match(serviceId(A), /^s_[0-9a-f]{16}$/u)
   assert.equal(keyId(A).includes(A), false)
 })
 
@@ -113,26 +109,7 @@ test('parseIsoDate rejects impossible calendar dates', () => {
   assert.equal(parseIsoDate('2026-01-01T12:00:00Z').dateOnly, false)
 })
 
-test('usage range defaults to the last 30 days and normalizes dates', () => {
-  const now = new Date('2026-10-29T15:00:00Z')
-  assert.deepEqual(validateUsageRange(undefined, undefined, now), {
-    ok: true,
-    startDate: '2026-09-29',
-    endDate: '2026-10-29',
-  })
-  assert.deepEqual(validateUsageRange('2026-10-01', '2026-10-10', now), {
-    ok: true,
-    startDate: '2026-10-01',
-    endDate: '2026-10-10',
-  })
-  assert.equal(validateUsageRange('2026-10-10', '2026-10-01', now).code, 'range_reversed')
-  assert.equal(validateUsageRange('2025-01-01', '2026-10-01', now).code, 'range_too_old')
-  assert.equal(validateUsageRange('nope', '2026-10-01', now).code, 'invalid_range')
-  assert.equal(validateUsageRange('2026-10-01', 'nope', now).code, 'invalid_range')
-})
-
-test('dateOnlyFromMs and truncateText are deterministic', () => {
-  assert.equal(dateOnlyFromMs(Date.UTC(2026, 9, 29)), '2026-10-29')
+test('truncateText is deterministic', () => {
   assert.equal(truncateText('abcdef', 3), 'abc\n…[truncated]')
   assert.equal(truncateText('abc', 3), 'abc')
 })

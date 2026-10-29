@@ -44,8 +44,8 @@ test('locale metadata is bilingual and card dictionaries have identical key sets
   const enKeys = Object.keys(en.card).sort()
   const zhKeys = Object.keys(zh.card).sort()
   assert.deepEqual(enKeys, zhKeys)
-  assert.ok(enKeys.length > 100)
-  for (const key of ['summary', 'keys.title', 'usage.title', 'service.title', 'footer']) {
+  assert.ok(enKeys.length > 70)
+  for (const key of ['summary', 'keys.title', 'billing.title', 'billing.open', 'footer']) {
     assert.equal(typeof en.card[key], 'string')
     assert.equal(typeof zh.card[key], 'string')
     assert.ok(en.card[key].length > 0)
@@ -70,6 +70,8 @@ test('the source client contains the build placeholder and the built bundle repl
   assert.match(built, /id: "dsh-exa"/u)
   assert.equal(built.includes('__UI_DICTS__'), false)
   assert.equal(built.includes('export '), false)
+  assert.match(built, /https:\/\/dashboard\.exa\.ai\/billing/u)
+  assert.equal(built.includes('/api/exa-usage'), false)
 })
 
 test('all JavaScript source files pass node --check', () => {
@@ -79,7 +81,6 @@ test('all JavaScript source files pass node --check', () => {
     'src/state.js',
     'src/key-manager.js',
     'src/exa-client.js',
-    'src/usage.js',
     'src/tools.js',
     'src/backend.js',
     'src/client.js',

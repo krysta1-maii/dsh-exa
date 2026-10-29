@@ -10,7 +10,6 @@ import { selectKeyOrder } from './lib.js'
 import { readManagerState } from './state.js'
 
 export const EXA_BASE_URL = 'https://api.exa.ai'
-export const ADMIN_BASE_URL = 'https://admin-api.exa.ai/team-management'
 export const RETRYABLE_STATUSES = new Set([401, 402, 429])
 
 /** Error carrying only non-secret Exa diagnostics. */
@@ -147,7 +146,7 @@ export async function callExaOperation(path, body, key, { signal, timeoutMs = 60
       'content-type': 'application/json',
       accept: 'application/json',
       authorization: 'Bearer ' + key,
-      'user-agent': 'dsh-exa/0.1.0',
+      'user-agent': 'dsh-exa/0.2.0',
     },
     body: JSON.stringify(body),
     signal,
@@ -172,38 +171,6 @@ export async function callExaOperation(path, body, key, { signal, timeoutMs = 60
     })
   }
   return { kind: 'ok', status: result.status, json: result.json, requestId: result.requestId }
-}
-
-/** Admin API request using the Team Management service key. */
-export async function callAdminApi(path, serviceKey, { signal, timeoutMs = 15000, query, operation = 'admin' } = {}) {
-  const url = new URL(ADMIN_BASE_URL + path)
-  if (query !== undefined && query !== null) {
-    for (const [name, value] of Object.entries(query)) {
-      if (value !== undefined && value !== null) url.searchParams.set(name, String(value))
-    }
-  }
-  const result = await requestJson({
-    url: url.toString(),
-    method: 'GET',
-    headers: {
-      accept: 'application/json',
-      'x-api-key': serviceKey,
-      'user-agent': 'dsh-exa/0.1.0',
-    },
-    signal,
-    timeoutMs,
-  })
-  if (!result.ok) {
-    throw httpError(operation, result.status, result.json, result.requestId)
-  }
-  if (result.json === null || typeof result.json !== 'object') {
-    throw new ExaApiError('exa_' + operation + ': response was not a JSON object', {
-      status: result.status,
-      code: 'invalid_response',
-      operation,
-    })
-  }
-  return result.json
 }
 
 function log(ctx, level, message, ...args) {

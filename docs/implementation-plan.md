@@ -1,5 +1,7 @@
 # dsh-exa 施工计划
 
+> 2026-10-29 实现变更：Team Management 预算/用量与 service key 已从插件中移除，改为 Exa Billing 快捷入口。以下内容保留为原始施工计划；当前实际行为以 [README](../README.md) 和 [验证记录](./verification.md) 为准。
+
 ## 1. 项目定位
 
 ### 1.1 目标

@@ -12,6 +12,7 @@ export function factory(require) {
   const DICTS = __UI_DICTS__
   const NS = 'dshExa'
   const PKG = 'dsh-exa'
+  const BILLING_URL = 'https://dashboard.exa.ai/billing'
   const inject = ['slots', 'locale']
 
   const ICONS = {
@@ -24,14 +25,7 @@ export function factory(require) {
     close: ['M4 4l8 8', 'M12 4l-8 8'],
     up: ['M8 13V3', 'M4 7l4-4 4 4'],
     down: ['M8 3v10', 'M4 9l4 4 4-4'],
-    refresh: ['M13.5 8a5.5 5.5 0 1 1-1.6-3.9', 'M13.7 2.5v3.2h-3.2'],
-    chevronDown: ['M4 6l4 4 4-4'],
-    chevronRight: ['M6 4l4 4-4 4'],
-    key: ['M9.5 2.5a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z', 'M7 7l-4.5 4.5V14h2.5v-2h2v-2'],
-    link: ['M6.5 9.5l3-3', 'M5.2 7.2l-1.6 1.6a2.7 2.7 0 0 0 3.8 3.8l1.6-1.6', 'M10.8 8.8l1.6-1.6a2.7 2.7 0 0 0-3.8-3.8L7 5'],
-    alert: ['M8 2.5l5.5 10h-11l5.5-10Z', 'M8 6v3', 'M8 11h.01'],
-    plus: ['M8 3v10', 'M3 8h10'],
-    shield: ['M8 2.2l5 2v4c0 3-2.2 5-5 5.6C5.2 13.2 3 11.2 3 8.2v-4l5-2Z'],
+    externalLink: ['M9 3h4v4', 'M13 3L7 9', 'M11 9v3H4V5h3'],
   }
 
   const CSS = [
@@ -58,22 +52,10 @@ export function factory(require) {
     '.dex-input:focus,.dex-select:focus,.dex-textarea:focus{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:-1px}',
     '.dex-input:disabled,.dex-select:disabled,.dex-textarea:disabled{opacity:.55;cursor:default}',
     '.dex-textarea{width:100%;min-height:58px;resize:vertical;font-family:var(--ds-font-family-code,ui-monospace,monospace);font-size:12px}',
-    '.dex-badge{display:inline-flex;align-items:center;border-radius:10px;padding:1px 7px;font-size:11px;line-height:18px;white-space:nowrap;border:1px solid transparent}',
-    '.dex-badge-ok{color:var(--dsw-alias-state-success-primary);border-color:var(--dsw-alias-state-success-primary)}',
-    '.dex-badge-warn{color:var(--dsw-alias-state-warn-primary);border-color:var(--dsw-alias-state-warn-primary)}',
-    '.dex-badge-error{color:var(--dsw-alias-state-error-primary);border-color:var(--dsw-alias-state-error-primary)}',
-    '.dex-badge-idle{color:var(--dsw-alias-label-secondary);border-color:var(--dsw-alias-border-l2)}',
     '.dex-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--dsw-alias-state-success-primary);flex:none}',
     '.dex-spinner{display:inline-block;width:12px;height:12px;border:2px solid var(--dsw-alias-border-l2);border-top-color:var(--dsw-alias-brand-primary);border-radius:50%;animation:dex-spin .8s linear infinite;vertical-align:-2px}',
     '@keyframes dex-spin{to{transform:rotate(360deg)}}',
     '.dex-actions{display:flex;flex-wrap:wrap;gap:1px;align-items:center}',
-    '.dex-range{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end}',
-    '.dex-range label{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--dsw-alias-label-secondary)}',
-    '.dex-expand{background:transparent;border:none;color:var(--dsw-alias-label-secondary);cursor:pointer;display:inline-flex;align-items:center;gap:4px;padding:0;font-size:12px;font-family:inherit}',
-    '.dex-expand:hover{color:var(--dsw-alias-label-primary)}',
-    '.dex-breakdown{margin:4px 0 8px 0;width:100%;border-collapse:collapse;font-size:12px}',
-    '.dex-breakdown th,.dex-breakdown td{padding:4px 8px;border-bottom:1px solid var(--dsw-alias-border-l2);text-align:left}',
-    '.dex-breakdown th{color:var(--dsw-alias-label-secondary);font-weight:600}',
     '.dex-notice{margin:0;font-size:12px;line-height:1.5}',
     '.dex-notice-ok{color:var(--dsw-alias-state-success-primary)}',
     '.dex-notice-error{color:var(--dsw-alias-state-error-primary)}',
@@ -120,10 +102,6 @@ export function factory(require) {
       ? 'dex-btn dex-btn-primary'
       : kind === 'danger' ? 'dex-btn dex-btn-danger' : 'dex-btn'
     return react.createElement('button', { type: 'button', className, style: buttonStyle, onClick, disabled, title }, children)
-  }
-
-  function Badge({ tone, children }) {
-    return react.createElement('span', { className: 'dex-badge dex-badge-' + (tone || 'idle') }, children)
   }
 
   function Spinner() {
@@ -186,58 +164,6 @@ export function factory(require) {
     return date.getFullYear() + '-' + pad(date.getMonth() + 1) + '-' + pad(date.getDate())
   }
 
-  function formatCost(value) {
-    if (typeof value !== 'number' || !Number.isFinite(value)) return '—'
-    if (value === 0) return '$0.00'
-    return '$' + value.toFixed(value > 0 && value < 0.01 ? 4 : 2)
-  }
-
-  function formatBudget(cents) {
-    if (typeof cents !== 'number' || !Number.isFinite(cents)) return null
-    return '$' + (cents / 100).toFixed(2)
-  }
-
-  function formatQuantity(value) {
-    if (typeof value !== 'number' || !Number.isFinite(value)) return '—'
-    return String(value)
-  }
-
-  function parseDateOnly(value) {
-    if (typeof value !== 'string') return null
-    const match = /^(\d{4})-(\d{2})-(\d{2})$/u.exec(value)
-    if (match === null) return null
-    const year = Number(match[1])
-    const month = Number(match[2])
-    const day = Number(match[3])
-    if (month < 1 || month > 12 || day < 1 || day > 31) return null
-    const ms = Date.UTC(year, month - 1, day)
-    const date = new Date(ms)
-    if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) return null
-    return ms
-  }
-
-  function dateOnly(ms) {
-    return new Date(ms).toISOString().slice(0, 10)
-  }
-
-  function defaultRange() {
-    const now = new Date()
-    const end = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())
-    return { start: dateOnly(end - 30 * 86400000), end: dateOnly(end) }
-  }
-
-  function validateRange(start, end) {
-    const startMs = parseDateOnly(start)
-    const endMs = parseDateOnly(end)
-    if (startMs === null || endMs === null) return 'usage.rangeFormat'
-    if (startMs > endMs) return 'usage.rangeReverse'
-    const now = new Date()
-    const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())
-    const oldest = today - 180 * 86400000
-    if (startMs < oldest) return 'usage.rangeTooOld'
-    return null
-  }
-
   function splitKeyInput(value) {
     if (typeof value !== 'string') return []
     return value.split(/[\s,]+/u).map((part) => part.trim()).filter((part) => part.length > 0)
@@ -264,17 +190,10 @@ export function factory(require) {
   }
 
   function ExaSettings({ t }) {
-    const initialRange = defaultRange()
     const [server, setServer] = useState(null)
     const [loadError, setLoadError] = useState(null)
     const [managerBusy, setManagerBusy] = useState(false)
-    const [usageBusy, setUsageBusy] = useState(false)
     const [notice, setNotice] = useState(null)
-    const [usage, setUsage] = useState(null)
-    const [usageError, setUsageError] = useState(null)
-    const [rangeError, setRangeError] = useState(null)
-    const [startDate, setStartDate] = useState(initialRange.start)
-    const [endDate, setEndDate] = useState(initialRange.end)
     const [draftOrder, setDraftOrder] = useState(null)
     const [draggingId, setDraggingId] = useState(null)
     const [dragOverId, setDragOverId] = useState(null)
@@ -283,11 +202,6 @@ export function factory(require) {
     const [replaceDrafts, setReplaceDrafts] = useState({})
     const [confirmDelete, setConfirmDelete] = useState({})
     const [addText, setAddText] = useState('')
-    const [serviceDraft, setServiceDraft] = useState('')
-    const [serviceReplacing, setServiceReplacing] = useState(false)
-    const [serviceRevealed, setServiceRevealed] = useState(null)
-    const [serviceConfirm, setServiceConfirm] = useState(false)
-    const [expanded, setExpanded] = useState({})
 
     const refreshManager = useCallback(async () => {
       setManagerBusy(true)
@@ -306,26 +220,8 @@ export function factory(require) {
       }
     }, [t])
 
-    const refreshUsage = useCallback(async (refresh) => {
-      setUsageBusy(true)
-      try {
-        const params = new URLSearchParams({ start_date: startDate, end_date: endDate })
-        if (refresh === true) params.set('refresh', '1')
-        const data = await apiGet('/api/exa-usage?' + params.toString())
-        setUsage(data)
-        setUsageError(null)
-      } catch (error) {
-        setUsageError(String(error && error.message ? error.message : error))
-      } finally {
-        setUsageBusy(false)
-      }
-    }, [startDate, endDate, t])
-
     useEffect(() => {
       refreshManager()
-      refreshUsage(false)
-      // The initial load deliberately uses the range captured on mount.
-      // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [])
 
     const runManager = useCallback(async (body, successText, options) => {
@@ -355,9 +251,6 @@ export function factory(require) {
     const orderDirty = draftOrder !== null && !sameIds(order, serverIds)
     const keysReadOnly = server === null ? true : server.writable.edit === false
     const addReadOnly = server === null ? true : server.writable.add === false
-    const service = server === null ? null : server.serviceKey
-    const serviceReadOnly = service === null ? true : service.writable === false
-
     const moveKey = (id, delta) => {
       const from = order.indexOf(id)
       const to = from + delta
@@ -408,7 +301,6 @@ export function factory(require) {
         setDraftOrder(null)
         setAddText('')
         setNotice({ ok: data.added > 0 ? t('keys.batchAdded').replace('{count}', String(data.added)) : t('keys.noNewKeys') })
-        await refreshUsage(false)
       } catch (error) {
         setNotice({ error: String(error && error.message ? error.message : error) })
       } finally {
@@ -444,7 +336,6 @@ export function factory(require) {
         setReplaceDrafts((current) => Object.assign({}, current, { [id]: '' }))
         setRevealed((current) => Object.assign({}, current, { [id]: false }))
         setNotice({ ok: t('keys.keyReplaced') })
-        await refreshUsage(false)
       } catch (error) {
         setNotice({ error: String(error && error.message ? error.message : error) })
       } finally {
@@ -468,7 +359,6 @@ export function factory(require) {
         setRevealed((current) => Object.assign({}, current, { [id]: false }))
         setExpanded((current) => Object.assign({}, current, { [id]: false }))
         setNotice({ ok: t('keys.keyRemoved') })
-        await refreshUsage(false)
       } catch (error) {
         setNotice({ error: String(error && error.message ? error.message : error) })
       } finally {
@@ -506,125 +396,6 @@ export function factory(require) {
       }
     }
 
-    const saveService = async () => {
-      const value = serviceDraft.trim()
-      if (value.length === 0) return
-      setManagerBusy(true)
-      setNotice(null)
-      try {
-        const data = await apiPost({ action: 'setServiceKey', value })
-        if (data.ok !== true) {
-          setNotice({ error: errorText(data, t) })
-          return
-        }
-        setServer(data)
-        setServiceDraft('')
-        setServiceReplacing(false)
-        setServiceRevealed(null)
-        setNotice({ ok: t('service.saved') })
-        await refreshUsage(false)
-      } catch (error) {
-        setNotice({ error: String(error && error.message ? error.message : error) })
-      } finally {
-        setManagerBusy(false)
-      }
-    }
-
-    const removeService = async () => {
-      if (serviceConfirm !== true) {
-        setServiceConfirm(true)
-        return
-      }
-      setServiceConfirm(false)
-      setManagerBusy(true)
-      setNotice(null)
-      try {
-        const data = await apiPost({ action: 'removeServiceKey' })
-        if (data.ok !== true) {
-          setNotice({ error: errorText(data, t) })
-          return
-        }
-        setServer(data)
-        setServiceDraft('')
-        setServiceReplacing(false)
-        setServiceRevealed(null)
-        setNotice({ ok: t('service.removed') })
-        await refreshUsage(false)
-      } catch (error) {
-        setNotice({ error: String(error && error.message ? error.message : error) })
-      } finally {
-        setManagerBusy(false)
-      }
-    }
-
-    const toggleServiceReveal = async () => {
-      if (typeof serviceRevealed === 'string') {
-        setServiceRevealed(null)
-        return
-      }
-      setManagerBusy(true)
-      setNotice(null)
-      try {
-        const data = await apiGet('/api/exa-manager?revealService=1')
-        if (data.ok !== true) {
-          setNotice({ error: errorText(data, t) })
-          return
-        }
-        setServiceRevealed(data.value)
-      } catch (error) {
-        setNotice({ error: String(error && error.message ? error.message : error) })
-      } finally {
-        setManagerBusy(false)
-      }
-    }
-
-    const linkKey = async (id, adminKeyId) => {
-      setManagerBusy(true)
-      setNotice(null)
-      try {
-        const data = await apiPost({ action: 'setAdminKeyId', id, adminKeyId: adminKeyId || null })
-        if (data.ok !== true) {
-          setNotice({ error: errorText(data, t) })
-          return
-        }
-        setServer(data)
-        setNotice({ ok: t('usage.linkSaved') })
-        await refreshUsage(false)
-      } catch (error) {
-        setNotice({ error: String(error && error.message ? error.message : error) })
-      } finally {
-        setManagerBusy(false)
-      }
-    }
-
-    const applyRange = async () => {
-      const errorKey = validateRange(startDate, endDate)
-      if (errorKey !== null) {
-        setRangeError(t(errorKey))
-        return
-      }
-      setRangeError(null)
-      await refreshUsage(false)
-    }
-
-    const refreshUsageNow = async () => {
-      const errorKey = validateRange(startDate, endDate)
-      if (errorKey !== null) {
-        setRangeError(t(errorKey))
-        return
-      }
-      setRangeError(null)
-      await refreshUsage(true)
-    }
-
-    const usageRows = usage !== null && Array.isArray(usage.rows) ? usage.rows : []
-    const usageById = new Map(usageRows.map((row) => [row.id, row]))
-    const teamKeys = usage !== null && Array.isArray(usage.teamKeys) ? usage.teamKeys : []
-    const totalCost = usage !== null && typeof usage.totalCostUsd === 'number' ? usage.totalCostUsd : null
-    const allUsageRowsOk = server !== null && server.keys.length > 0 && server.keys.every((entry) => {
-      const row = usageById.get(entry.id)
-      return row !== undefined && row.ok === true
-    })
     const sourceText = server === null
       ? t('keys.sourceNone')
       : server.source === 'list' ? t('keys.sourceList') : server.source === 'primary' ? t('keys.sourcePrimary') : t('keys.sourceNone')
@@ -722,97 +493,6 @@ export function factory(require) {
       return row
     }
 
-    const renderUsageRow = (id, index) => {
-      if (server === null) return null
-      const entry = server.keys.find((item) => item.id === id)
-      if (entry === undefined) return null
-      const row = usageById.get(entry.id)
-      const isExpanded = expanded[entry.id] === true
-      const budgetText = row !== undefined && row.budgetCents !== null && row.budgetCents !== undefined
-        ? formatBudget(row.budgetCents)
-        : null
-      const status = row === undefined
-        ? react.createElement(Badge, { tone: 'idle' }, t('common.na'))
-        : row.ok !== true
-          ? row.code === 'unlinked'
-            ? react.createElement(Badge, { tone: 'idle' }, t('usage.notLinked'))
-            : react.createElement(Badge, { tone: 'idle' }, t('common.na'))
-          : row.isOverBudget === true
-            ? react.createElement(Badge, { tone: 'error' }, t('usage.overBudget'))
-            : row.budgetCents === null
-              ? react.createElement(Badge, { tone: 'idle' }, t('usage.noBudget'))
-              : react.createElement(Badge, { tone: 'ok' }, t('usage.withinBudget'))
-      const currentAdmin = row !== undefined && typeof row.adminKeyId === 'string' ? row.adminKeyId : null
-      const teamNames = teamKeys.map((teamKey) => ({ id: teamKey.id, name: teamKey.name || teamKey.id }))
-      if (currentAdmin !== null && !teamNames.some((teamKey) => teamKey.id === currentAdmin)) {
-        teamNames.push({ id: currentAdmin, name: t('usage.unknownKey') })
-      }
-      const linkValue = currentAdmin === null ? '' : currentAdmin
-      const rowError = row !== undefined && row.ok !== true && row.code !== 'unlinked'
-        ? react.createElement('div', { className: 'dex-small', style: { color: 'var(--dsw-alias-state-error-primary)', marginTop: 3 } }, errorText(row, t))
-        : null
-      const detail = isExpanded && row !== undefined && row.ok === true
-        ? react.createElement('tr', { key: entry.id + '-breakdown' },
-          react.createElement('td', { colSpan: 5, style: { padding: '4px 8px 10px 8px' } },
-            row.costBreakdown.length === 0
-              ? react.createElement('p', { className: 'dex-small' }, t('usage.noBreakdown'))
-              : react.createElement('table', { className: 'dex-breakdown' },
-                react.createElement('thead', null, react.createElement('tr', null,
-                  react.createElement('th', null, t('usage.price')),
-                  react.createElement('th', null, t('usage.quantity')),
-                  react.createElement('th', null, t('usage.amount'))
-                )),
-                react.createElement('tbody', null, row.costBreakdown.map((item, itemIndex) => react.createElement('tr', { key: itemIndex },
-                  react.createElement('td', null, item.priceName || item.priceId || '—'),
-                  react.createElement('td', null, formatQuantity(item.quantity)),
-                  react.createElement('td', null, formatCost(item.amountUsd))
-                )))
-              )
-          )
-        )
-        : null
-      return react.createElement(react.Fragment, { key: entry.id },
-        react.createElement('tr', { key: entry.id },
-          react.createElement('td', null,
-            react.createElement('div', { style: { fontSize: 13, fontWeight: 600 } }, row !== undefined && row.name ? row.name : entry.masked),
-            react.createElement('div', { className: 'dex-key', style: { marginTop: 2 } }, entry.masked),
-            rowError
-          ),
-          react.createElement('td', null, budgetText === null ? t('usage.noBudget') : budgetText),
-          react.createElement('td', null, status),
-          react.createElement('td', null,
-            react.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' } },
-              react.createElement('span', null, row !== undefined && row.ok === true ? formatCost(row.totalCostUsd) : t('usage.noCost')),
-              row !== undefined && row.ok === true && row.costBreakdown.length > 0
-                ? react.createElement('button', {
-                  type: 'button',
-                  className: 'dex-expand',
-                  title: isExpanded ? t('usage.collapse') : t('usage.expand'),
-                  'aria-expanded': isExpanded,
-                  onClick: () => setExpanded((current) => Object.assign({}, current, { [entry.id]: !isExpanded })),
-                }, react.createElement(SvgIcon, { name: isExpanded ? 'chevronDown' : 'chevronRight', size: 11 }), isExpanded ? t('usage.collapse') : t('usage.expand'))
-                : null
-            )
-          ),
-          react.createElement('td', null,
-            react.createElement('select', {
-              className: 'dex-select',
-              style: { width: '100%', maxWidth: 190 },
-              'aria-label': t('usage.linkPlaceholder'),
-              title: t('usage.linkHint'),
-              value: linkValue,
-              disabled: managerBusy || teamKeys.length === 0,
-              onChange: (event) => linkKey(entry.id, event.target.value),
-            },
-            react.createElement('option', { value: '' }, t('usage.linkPlaceholder')),
-            teamNames.map((teamKey) => react.createElement('option', { key: teamKey.id, value: teamKey.id }, teamKey.name))
-            )
-          )
-        ),
-        detail
-      )
-    }
-
     if (server === null) {
       return react.createElement('div', { style: { display: 'flex', flexDirection: 'column', gap: 12, minWidth: 0 } },
         react.createElement('style', null, CSS),
@@ -899,91 +579,13 @@ export function factory(require) {
 
       react.createElement('section', { style: sectionStyle },
         react.createElement('div', { style: sectionHeadStyle },
-          react.createElement('h3', { style: h3Style }, t('service.title')),
-          react.createElement(Badge, { tone: service.configured ? 'ok' : 'idle' }, service.configured ? t('service.configured') : t('service.notConfigured'))
+          react.createElement('h3', { style: h3Style }, t('billing.title'))
         ),
-        react.createElement('p', { style: pStyle }, t('service.subtitle')),
-        react.createElement('p', { className: 'dex-small' }, t('service.adminHint')),
-        service.configured && !serviceReplacing
-          ? react.createElement('div', { style: { display: 'flex', flexDirection: 'column', gap: 7 } },
-            react.createElement('div', { style: { display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' } },
-              react.createElement('span', { className: 'dex-key' }, typeof serviceRevealed === 'string' ? serviceRevealed : service.masked),
-              react.createElement('span', { className: 'dex-small' }, service.savedAt ? formatDate(service.savedAt) : t('service.savedUnknown')),
-              react.createElement(IconButton, { icon: typeof serviceRevealed === 'string' ? 'eyeOff' : 'eye', title: typeof serviceRevealed === 'string' ? t('service.hide') : t('service.reveal'), onClick: toggleServiceReveal, disabled: managerBusy }),
-              react.createElement(IconButton, { icon: 'pencil', title: t('service.replace'), onClick: () => { setServiceReplacing(true); setServiceDraft(''); setServiceConfirm(false); setNotice(null) }, disabled: managerBusy || serviceReadOnly }),
-              react.createElement(IconButton, { icon: serviceConfirm ? 'check' : 'trash', title: serviceConfirm ? t('service.confirmRemove') : t('service.remove'), onClick: removeService, disabled: managerBusy || serviceReadOnly, danger: !serviceConfirm })
-            )
-          )
-          : react.createElement('div', { style: { display: 'flex', flexDirection: 'column', gap: 7 } },
-            react.createElement('input', {
-              className: 'dex-input',
-              style: { width: '100%', maxWidth: 520 },
-              type: 'password',
-              autoComplete: 'off',
-              placeholder: t('service.placeholder'),
-              'aria-label': t('service.placeholder'),
-              value: serviceDraft,
-              disabled: managerBusy || serviceReadOnly,
-              onChange: (event) => setServiceDraft(event.target.value),
-            }),
-            react.createElement('div', { style: { display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' } },
-              react.createElement(TextButton, { kind: 'primary', onClick: saveService, disabled: managerBusy || serviceReadOnly || serviceDraft.trim().length === 0 }, t('service.save')),
-              service.configured
-                ? react.createElement(TextButton, { onClick: () => { setServiceReplacing(false); setServiceDraft(''); setNotice(null) }, disabled: managerBusy }, t('service.cancel'))
-                : null
-            )
-          ),
-        serviceReadOnly ? react.createElement('p', { className: 'dex-small' }, t('service.readOnly')) : null
-      ),
-
-      react.createElement('section', { style: sectionStyle },
-        react.createElement('div', { style: sectionHeadStyle },
-          react.createElement('h3', { style: h3Style }, t('usage.title')),
-          usageBusy ? react.createElement('span', { className: 'dex-small' }, react.createElement(Spinner), ' ', t('usage.loading')) : null
-        ),
-        react.createElement('p', { style: pStyle }, t('usage.subtitle')),
-        react.createElement('div', { className: 'dex-range' },
-          react.createElement('label', null, t('usage.start'),
-            react.createElement('input', { className: 'dex-input', type: 'date', value: startDate, disabled: usageBusy, onChange: (event) => setStartDate(event.target.value) })),
-          react.createElement('label', null, t('usage.end'),
-            react.createElement('input', { className: 'dex-input', type: 'date', value: endDate, disabled: usageBusy, onChange: (event) => setEndDate(event.target.value) })),
-          react.createElement(TextButton, { onClick: applyRange, disabled: usageBusy }, t('usage.apply')),
-          react.createElement(TextButton, { onClick: refreshUsageNow, disabled: usageBusy }, react.createElement(IconLabel, { icon: 'refresh' }, t('usage.refresh')))
-        ),
-        rangeError !== null ? react.createElement('p', { style: errorStyle, role: 'alert' }, rangeError) : null,
-        usageError !== null ? react.createElement('p', { style: errorStyle, role: 'alert' }, usageError) : null,
-        usage !== null && usage.range !== undefined && usage.range !== null
-          ? react.createElement('p', { className: 'dex-small', style: { margin: 0 } }, t('usage.period') + ': ' + usage.range.startDate + ' – ' + usage.range.endDate)
-          : null,
-        usage === null
-          ? null
-          : usage.configured === false
-            ? react.createElement('p', { style: pStyle }, t('usage.notConfigured'))
-            : usage.ok === false
-              ? react.createElement('p', { style: errorStyle, role: 'alert' }, errorText(usage, t))
-              : server.keys.length === 0
-                ? react.createElement('p', { style: pStyle }, t('usage.noKeys'))
-                : react.createElement('div', { style: { display: 'flex', flexDirection: 'column', gap: 8 } },
-                  react.createElement('div', { className: 'dex-table-wrap' },
-                    react.createElement('table', { className: 'dex-table' },
-                      react.createElement('thead', null, react.createElement('tr', null,
-                        react.createElement('th', { style: { width: '32%' } }, t('usage.key')),
-                        react.createElement('th', { style: { width: '16%' } }, t('usage.budget')),
-                        react.createElement('th', { style: { width: '17%' } }, t('usage.status')),
-                        react.createElement('th', { style: { width: '19%' } }, t('usage.cost')),
-                        react.createElement('th', null, t('usage.link'))
-                      )),
-                      react.createElement('tbody', null, order.map((id, index) => renderUsageRow(id, index)))
-                    )
-                  ),
-                  totalCost !== null && allUsageRowsOk
-                    ? react.createElement('div', { style: { display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 13, fontWeight: 600 } },
-                      react.createElement('span', null, t('usage.total')),
-                      react.createElement('span', null, formatCost(totalCost)))
-                    : null
-                ),
-        react.createElement('p', { className: 'dex-small', style: { margin: 0 } }, t('usage.periodNote')),
-        react.createElement('p', { className: 'dex-small', style: { margin: 0 } }, t('usage.budgetNote'))
+        react.createElement('p', { style: pStyle }, t('billing.subtitle')),
+        react.createElement('div', { style: { display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' } },
+          react.createElement(TextButton, { onClick: () => { window.open(BILLING_URL, '_blank', 'noopener,noreferrer') } },
+            react.createElement(IconLabel, { icon: 'externalLink' }, t('billing.open')))
+        )
       ),
 
       react.createElement('p', { className: 'dex-small', style: { margin: 0 } }, t('footer'))

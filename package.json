@@ -1,7 +1,7 @@
 {
   "name": "dsh-exa",
-  "version": "0.1.0",
-  "description": "Exa semantic search and URL reading tools for DeepSeek Harness, with multi-key priority or round-robin routing and a key, budget, and usage management card on the Plugins page. The built-in web_search is never replaced.",
+  "version": "0.2.0",
+  "description": "Exa semantic search and URL reading tools for DeepSeek Harness, with multi-key priority or round-robin routing, key management on the Plugins page, and a shortcut to Exa Billing. The built-in web_search is never replaced.",
   "icon": "./icon.svg",
   "type": "module",
   "main": "./src/index.js",
@@ -50,7 +50,7 @@
   "scripts": {
     "build": "node scripts/build-client.mjs",
     "test": "node --test",
-    "check": "node --check src/index.js && node --check src/lib.js && node --check src/state.js && node --check src/key-manager.js && node --check src/exa-client.js && node --check src/usage.js && node --check src/tools.js && node --check src/backend.js && node --check src/client.js"
+    "check": "node --check src/index.js && node --check src/lib.js && node --check src/state.js && node --check src/key-manager.js && node --check src/exa-client.js && node --check src/tools.js && node --check src/backend.js && node --check src/client.js"
   },
   "keywords": [
     "deepseek-harness",

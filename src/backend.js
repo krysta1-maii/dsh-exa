@@ -1,29 +1,22 @@
 /**
- * Management routes for the Exa card: /api/exa-manager and /api/exa-usage.
+ * Management route for the Exa card: /api/exa-manager.
  *
- * The manager route owns key-list edits, service-key edits, strategy, and the
- * local-to-Admin key association. The usage route only performs Team
- * Management GETs; a missing or rejected service key degrades to an explicit
- * status without blocking key management.
+ * The route owns key-list edits and the routing strategy. It never performs
+ * Exa search, contents, or billing requests; those stay in the tools or in the
+ * Exa dashboard.
  */
-import { ExaApiError } from './exa-client.js'
 import {
   API_KEY_REF,
   API_KEYS_REF,
   READONLY_LIST,
   READONLY_PRIMARY,
-  READONLY_SERVICE,
-  SERVICE_KEY_REF,
-  collectServiceKey,
   collectStoredKeys,
-  describeServiceKey,
   keyEntries,
   refWritable,
   writeStoredKeys,
 } from './key-manager.js'
-import { keyId, maskValue, parseKeyInput, parseKeyList, validateUsageRange } from './lib.js'
+import { keyId, parseKeyInput, parseKeyList } from './lib.js'
 import { readManagerState, updateManagerState } from './state.js'
-import { adminErrorCode, createUsageClient } from './usage.js'
 
 const BODY_LIMIT = 1024 * 1024
 
@@ -91,13 +84,9 @@ function errorPayload(error) {
   if (error instanceof ManagerError) {
     return { status: error.status, body: { ok: false, code: error.code, error: error.message } }
   }
-  if (error instanceof ExaApiError) {
-    return { status: 502, body: { ok: false, code: 'admin_error', error: error.message } }
-  }
   const message = error instanceof Error ? error.message : String(error)
   if (message === READONLY_LIST) return { status: 409, body: { ok: false, code: 'readonly_keys', error: READONLY_LIST } }
   if (message === READONLY_PRIMARY) return { status: 409, body: { ok: false, code: 'readonly_primary', error: READONLY_PRIMARY } }
-  if (message === READONLY_SERVICE) return { status: 409, body: { ok: false, code: 'readonly_service', error: READONLY_SERVICE } }
   return { status: 500, body: { ok: false, code: 'save_failed', error: message } }
 }
 
@@ -116,7 +105,6 @@ async function writableSnapshot(credentials) {
   return {
     list: await refWritable(credentials, API_KEYS_REF),
     primary: await refWritable(credentials, API_KEY_REF),
-    service: await refWritable(credentials, SERVICE_KEY_REF),
   }
 }
 
@@ -129,7 +117,6 @@ async function managerPayload(credentials) {
   const writable = {
     list: permissions.list,
     primary: permissions.primary,
-    service: permissions.service,
     add: permissions.list,
     edit,
   }
@@ -139,7 +126,6 @@ async function managerPayload(credentials) {
     source,
     strategy: state.strategy,
     writable,
-    serviceKey: await describeServiceKey(credentials, state),
     updatedAt: state.updatedAt,
   }
 }
@@ -154,10 +140,6 @@ function assertCanEdit(source, writable) {
 
 function assertCanAdd(writable) {
   if (!writable.list) throw new ManagerError('readonly_keys', READONLY_LIST, 409)
-}
-
-function assertCanEditService(writable) {
-  if (!writable.service) throw new ManagerError('readonly_service', READONLY_SERVICE, 409)
 }
 
 function idsFromBody(body) {
@@ -193,7 +175,6 @@ function stateSavedAt(state, id, now) {
 
 function removeStateEntry(state, id) {
   delete state.keySavedAt[id]
-  delete state.adminKeyIds[id]
 }
 
 function updateStateSafely(ctx, mutator) {
@@ -234,12 +215,6 @@ async function revealKey(credentials, id) {
   const { values } = await collectStoredKeys(credentials)
   const value = values.find((item) => keyId(item) === id)
   if (value === undefined) throw new ManagerError('key_not_found', 'key not found', 404)
-  return value
-}
-
-async function revealServiceKey(credentials) {
-  const value = await collectServiceKey(credentials)
-  if (value === null) throw new ManagerError('service_not_configured', 'service key is not configured', 404)
   return value
 }
 
@@ -342,56 +317,6 @@ async function setStrategy(ctx, credentials, body) {
   return managerPayload(credentials)
 }
 
-async function setAdminKeyId(ctx, credentials, body) {
-  const id = typeof body.id === 'string' ? body.id.trim() : ''
-  if (id.length === 0) throw new ManagerError('invalid_value', 'id is required')
-  const { values } = await collectStoredKeys(credentials)
-  if (!values.some((value) => keyId(value) === id)) throw new ManagerError('key_not_found', 'key not found', 404)
-  const raw = body.adminKeyId
-  let adminKeyId = null
-  if (raw !== undefined && raw !== null && raw !== '') {
-    if (typeof raw !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/u.test(raw.trim())) {
-      throw new ManagerError('invalid_value', 'adminKeyId must be a team key id or null')
-    }
-    adminKeyId = raw.trim()
-  }
-  try {
-    updateManagerState((state) => {
-      if (adminKeyId === null) delete state.adminKeyIds[id]
-      else state.adminKeyIds[id] = adminKeyId
-      return state
-    })
-  } catch (error) {
-    throw new ManagerError('save_failed', 'could not persist the key association: ' + (error instanceof Error ? error.message : String(error)), 500)
-  }
-  return managerPayload(credentials)
-}
-
-async function setServiceKey(ctx, credentials, body) {
-  const value = typeof body.value === 'string' ? body.value.trim() : ''
-  if (value.length === 0) throw new ManagerError('invalid_value', 'service key value is required')
-  const permissions = await writableSnapshot(credentials)
-  assertCanEditService(permissions)
-  await credentials.set(SERVICE_KEY_REF, value)
-  const now = new Date().toISOString()
-  updateStateSafely(ctx, (state) => {
-    state.serviceKeySavedAt = now
-    return state
-  })
-  return managerPayload(credentials)
-}
-
-async function removeServiceKey(ctx, credentials) {
-  const permissions = await writableSnapshot(credentials)
-  assertCanEditService(permissions)
-  await credentials.unset(SERVICE_KEY_REF)
-  updateStateSafely(ctx, (state) => {
-    state.serviceKeySavedAt = null
-    return state
-  })
-  return managerPayload(credentials)
-}
-
 async function managerRoute(ctx, credentials, req, res) {
   if (credentials === undefined || credentials === null) {
     sendJson(res, 500, { ok: false, code: 'credentials_unavailable', error: 'credentials service unavailable' })
@@ -400,12 +325,6 @@ async function managerRoute(ctx, credentials, req, res) {
   const url = new URL(req.url || '/', 'http://localhost')
   if (req.method === 'GET') {
     const reveal = url.searchParams.get('reveal')
-    const revealService = url.searchParams.get('revealService')
-    if (revealService === '1' || revealService === 'true' || reveal === 'service') {
-      const value = await revealServiceKey(credentials)
-      sendJson(res, 200, { ok: true, value })
-      return
-    }
     if (reveal !== null) {
       const value = await revealKey(credentials, reveal)
       sendJson(res, 200, { ok: true, value })
@@ -437,143 +356,15 @@ async function managerRoute(ctx, credentials, req, res) {
     case 'setStrategy':
       payload = await setStrategy(ctx, credentials, body)
       break
-    case 'setAdminKeyId':
-      payload = await setAdminKeyId(ctx, credentials, body)
-      break
-    case 'setServiceKey':
-      payload = await setServiceKey(ctx, credentials, body)
-      break
-    case 'removeServiceKey':
-      payload = await removeServiceKey(ctx, credentials)
-      break
     default:
       throw new ManagerError('invalid_action', 'unsupported action')
   }
   sendJson(res, 200, payload)
 }
 
-async function usageRoute(usageClient, credentials, req, res) {
-  if (credentials === undefined || credentials === null) {
-    sendJson(res, 500, { ok: false, code: 'credentials_unavailable', error: 'credentials service unavailable' })
-    return
-  }
-  if (req.method !== 'GET') {
-    sendJson(res, 405, { ok: false, code: 'method_not_allowed', error: 'method not allowed' })
-    return
-  }
-  const url = new URL(req.url || '/', 'http://localhost')
-  const range = validateUsageRange(url.searchParams.get('start_date'), url.searchParams.get('end_date'))
-  if (!range.ok) {
-    sendJson(res, 400, { ok: false, code: range.code, error: range.message })
-    return
-  }
-  const refresh = url.searchParams.get('refresh') === '1' || url.searchParams.get('refresh') === 'true'
-  const serviceKey = await collectServiceKey(credentials)
-  if (serviceKey === null) {
-    sendJson(res, 200, {
-      ok: true,
-      configured: false,
-      range,
-      rows: [],
-      teamKeys: [],
-      message: 'Team Management service key is not configured',
-      fetchedAt: new Date().toISOString(),
-    })
-    return
-  }
-  const { values } = await collectStoredKeys(credentials)
-  const state = readManagerState()
-  let teamKeys
-  try {
-    teamKeys = await usageClient.getTeamKeys(serviceKey, { refresh })
-  } catch (error) {
-    const code = adminErrorCode(error)
-    sendJson(res, 200, {
-      ok: false,
-      configured: true,
-      code,
-      error: error instanceof Error ? error.message : String(error),
-      range,
-      rows: [],
-      teamKeys: [],
-      fetchedAt: new Date().toISOString(),
-    })
-    return
-  }
-  const teamById = new Map(teamKeys.map((entry) => [entry.id, entry]))
-  const rows = []
-  for (const value of values) {
-    const id = keyId(value)
-    const masked = maskValue(value)
-    const saved = typeof state.adminKeyIds[id] === 'string' ? state.adminKeyIds[id] : null
-    const direct = teamById.has(value) ? value : null
-    const adminKeyId = saved ?? direct
-    if (adminKeyId === null) {
-      rows.push({ ok: false, id, masked, code: 'unlinked', error: 'key is not linked to a team key' })
-      continue
-    }
-    const adminKey = teamById.get(adminKeyId)
-    if (adminKey === undefined) {
-      rows.push({
-        ok: false,
-        id,
-        masked,
-        adminKeyId,
-        code: 'not_in_team',
-        error: 'the linked team key is not in the current team key list',
-      })
-      continue
-    }
-    try {
-      const usage = await usageClient.getUsage(serviceKey, adminKeyId, range, { refresh })
-      rows.push({
-        ok: true,
-        id,
-        masked,
-        adminKeyId,
-        name: adminKey.name,
-        rateLimit: adminKey.rateLimit,
-        budgetCents: adminKey.budgetCents,
-        isOverBudget: adminKey.isOverBudget,
-        totalCostUsd: usage.totalCostUsd,
-        costBreakdown: usage.costBreakdown,
-        period: usage.period,
-      })
-    } catch (error) {
-      rows.push({
-        ok: false,
-        id,
-        masked,
-        adminKeyId,
-        name: adminKey.name,
-        rateLimit: adminKey.rateLimit,
-        budgetCents: adminKey.budgetCents,
-        isOverBudget: adminKey.isOverBudget,
-        code: adminErrorCode(error),
-        error: error instanceof Error ? error.message : String(error),
-      })
-    }
-  }
-  const totalCostUsd = rows.reduce((sum, row) => row.ok ? sum + row.totalCostUsd : sum, 0)
-  sendJson(res, 200, {
-    ok: true,
-    configured: true,
-    range,
-    rows,
-    teamKeys,
-    totalCostUsd,
-    fetchedAt: new Date().toISOString(),
-  })
-}
-
-/**
- * Install both exact routes and the usage cache on the owning fiber.
- * Repeated installs register fresh route objects; unloading removes them.
- */
+/** Install the exact management route on the owning fiber. */
 export function installBackend(ctx) {
   const credentials = ctx.get('credentials')
-  const usageClient = createUsageClient()
-  ctx.effect(() => () => usageClient.clear(), 'dsh-exa: usage cache')
 
   ctx.effect(() => ctx.webServer.register({
     kind: 'exact',
@@ -588,19 +379,4 @@ export function installBackend(ctx) {
       }
     },
   }), 'dsh-exa: route /api/exa-manager')
-
-  ctx.effect(() => ctx.webServer.register({
-    kind: 'exact',
-    path: '/api/exa-usage',
-    handler: async (req, res) => {
-      try {
-        await usageRoute(usageClient, credentials, req, res)
-      } catch (error) {
-        const code = error instanceof ManagerError ? error.code : 'usage_unavailable'
-        const status = error instanceof ManagerError ? error.status : 500
-        log(ctx, 'warn', 'dsh-exa: usage route failed: %s', code)
-        sendJson(res, status, { ok: false, code, error: error instanceof Error ? error.message : String(error) })
-      }
-    },
-  }), 'dsh-exa: route /api/exa-usage')
 }

@@ -69,12 +69,6 @@ export function keyId(value) {
   return 'k_' + createHash('sha256').update(value).digest('hex').slice(0, 16)
 }
 
-/** Stable non-secret identifier for a service key value. */
-export function serviceId(value) {
-  if (typeof value !== 'string' || value.length === 0) return ''
-  return 's_' + createHash('sha256').update(value).digest('hex').slice(0, 16)
-}
-
 /**
  * Snapshot the starting order for one call.
  *
@@ -261,48 +255,6 @@ export function requiredIsoDate(value, name) {
   const parsed = parseIsoDate(value)
   if (parsed === null) throw new Error(name + ' must be an ISO 8601 date or date-time')
   return value.trim()
-}
-
-/** UTC date-only string for a millisecond timestamp. */
-export function dateOnlyFromMs(ms) {
-  return new Date(ms).toISOString().slice(0, 10)
-}
-
-/** Start of the UTC day containing the timestamp. */
-export function startOfUtcDay(ms) {
-  const d = new Date(ms)
-  return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate())
-}
-
-/**
- * Validate the usage date range. Defaults are the most recent 30 days; the
- * earliest allowed start is 180 days before now. Dates are normalized to UTC
- * calendar days because the Team Management usage API accepts date-only values.
- */
-export function validateUsageRange(startValue, endValue, now = new Date()) {
-  const nowMs = now.getTime()
-  const endParsed = endValue === undefined || endValue === null || endValue === ''
-    ? { ms: startOfUtcDay(nowMs) }
-    : parseIsoDate(endValue)
-  if (endParsed === null) {
-    return { ok: false, code: 'invalid_range', message: 'end_date must be an ISO 8601 date' }
-  }
-  const endMs = startOfUtcDay(endParsed.ms)
-  const startParsed = startValue === undefined || startValue === null || startValue === ''
-    ? { ms: endMs - 30 * 86400000 }
-    : parseIsoDate(startValue)
-  if (startParsed === null) {
-    return { ok: false, code: 'invalid_range', message: 'start_date must be an ISO 8601 date' }
-  }
-  const startMs = startOfUtcDay(startParsed.ms)
-  if (startMs > endMs) {
-    return { ok: false, code: 'range_reversed', message: 'start_date must not be after end_date' }
-  }
-  const oldestMs = startOfUtcDay(nowMs - 180 * 86400000)
-  if (startMs < oldestMs) {
-    return { ok: false, code: 'range_too_old', message: 'start_date must be within the last 180 days' }
-  }
-  return { ok: true, startDate: dateOnlyFromMs(startMs), endDate: dateOnlyFromMs(endMs) }
 }
 
 /** Truncate text with an explicit marker. */
