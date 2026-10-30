@@ -1,7 +1,7 @@
 {
   "name": "dsh-exa",
-  "version": "0.2.0",
-  "description": "Exa semantic search and URL reading tools for DeepSeek Harness, with multi-key priority or round-robin routing, key management on the Plugins page, and a shortcut to Exa Billing. The built-in web_search is never replaced.",
+  "version": "0.3.1",
+  "description": "Exa semantic search and URL reading tools for DeepSeek Harness, with active-key filtering, multi-key priority or round-robin routing, automatic deactivation on HTTP 402, key management on the Plugins page, and a shortcut to Exa Billing. The built-in web_search is never replaced.",
   "icon": "./icon.svg",
   "type": "module",
   "main": "./src/index.js",
@@ -26,7 +26,8 @@
   ],
   "license": "MIT",
   "engines": {
-    "node": ">=22"
+    "node": ">=22",
+    "dsh": ">=0.2.1-0 <0.2.2-0"
   },
   "publishConfig": {
     "access": "public"
@@ -42,8 +43,10 @@
       ]
     },
     "compatibility": {
+      "dsh": ">=0.2.1-0 <0.2.2-0",
       "dshReleases": {
-        "0.2.1-rc.3": "compatible"
+        "0.2.1-rc.3": "compatible",
+        "0.2.1-rc.5": "compatible"
       }
     }
   },
@@ -63,12 +66,12 @@
   ],
   "peerDependencies": {
     "@deepseek-ai/cordis": "~4.0.5",
-    "@deepseek-ai/dsh-home-paths": "0.2.1-rc.3",
-    "@deepseek-ai/dsh-tools": "0.2.1-rc.3"
+    "@deepseek-ai/dsh-home-paths": ">=0.2.1-0 <0.2.2-0",
+    "@deepseek-ai/dsh-tools": ">=0.2.1-0 <0.2.2-0"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "4.0.5",
-    "@deepseek-ai/dsh-home-paths": "0.2.1-rc.3",
-    "@deepseek-ai/dsh-tools": "0.2.1-rc.3"
+    "@deepseek-ai/dsh-home-paths": "0.2.1-rc.5",
+    "@deepseek-ai/dsh-tools": "0.2.1-rc.5"
   }
 }

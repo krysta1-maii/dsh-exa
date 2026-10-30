@@ -48,6 +48,13 @@ export function factory(require) {
     '.dex-small{font-size:11px;line-height:1.45;color:var(--dsw-alias-label-secondary)}',
     '.dex-row-dragging{opacity:.45}',
     '.dex-row-drop td{border-top:2px solid var(--dsw-alias-brand-primary)}',
+    '.dex-row-inactive .dex-key{opacity:.58}',
+    '.dex-keyline{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0}',
+    '.dex-status{flex:none;border-radius:999px;border:1px solid var(--dsw-alias-border-l2);background:transparent;color:var(--dsw-alias-label-secondary);font-size:11px;line-height:18px;padding:0 8px;cursor:pointer;font-family:inherit}',
+    '.dex-status:hover:not(:disabled){background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-primary)}',
+    '.dex-status:disabled{opacity:.45;cursor:default}',
+    '.dex-status-on{border-color:var(--dsw-alias-state-success-primary);color:var(--dsw-alias-state-success-primary)}',
+    '.dex-status-off{border-color:var(--dsw-alias-border-l2);color:var(--dsw-alias-label-secondary)}',
     '.dex-input,.dex-select,.dex-textarea{box-sizing:border-box;border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);border-radius:8px;padding:7px 9px;font-size:13px;font-family:inherit}',
     '.dex-input:focus,.dex-select:focus,.dex-textarea:focus{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:-1px}',
     '.dex-input:disabled,.dex-select:disabled,.dex-textarea:disabled{opacity:.55;cursor:default}',
@@ -164,6 +171,14 @@ export function factory(require) {
     return date.getFullYear() + '-' + pad(date.getMonth() + 1) + '-' + pad(date.getDate())
   }
 
+  function inactiveReasonText(entry, t) {
+    const reason = entry !== null && entry !== undefined && entry.inactiveReason === 'http_402'
+      ? t('keys.inactiveAuto')
+      : t('keys.inactiveManual')
+    const date = formatDate(entry !== null && entry !== undefined ? entry.inactiveAt : null)
+    return date === '—' ? reason : reason + ' · ' + date
+  }
+
   function splitKeyInput(value) {
     if (typeof value !== 'string') return []
     return value.split(/[\s,]+/u).map((part) => part.trim()).filter((part) => part.length > 0)
@@ -247,6 +262,7 @@ export function factory(require) {
     }, [t])
 
     const serverIds = server === null ? [] : server.keys.map((entry) => entry.id)
+    const activeCount = server === null ? 0 : server.keys.filter((entry) => entry.active !== false).length
     const order = draftOrder === null ? serverIds : draftOrder
     const orderDirty = draftOrder !== null && !sameIds(order, serverIds)
     const keysReadOnly = server === null ? true : server.writable.edit === false
@@ -281,6 +297,14 @@ export function factory(require) {
     const saveStrategy = async (strategy) => {
       if (server === null || strategy === server.strategy) return
       await runManager({ action: 'setStrategy', strategy }, t('strategy.saved'), { resetDraft: false })
+    }
+
+    const toggleActive = async (id, active) => {
+      await runManager(
+        { action: 'setKeyActive', id, active },
+        active ? t('keys.activated') : t('keys.deactivated'),
+        { resetDraft: false },
+      )
     }
 
     const addKeys = async () => {
@@ -408,8 +432,12 @@ export function factory(require) {
       const isRevealed = typeof revealed[entry.id] === 'string'
       const isConfirm = confirmDelete[entry.id] === true
       const draft = typeof replaceDrafts[entry.id] === 'string' ? replaceDrafts[entry.id] : ''
+      const isActive = entry.active !== false
       const canDrag = !keysReadOnly && !managerBusy
-      const rowClass = 'dex-row' + (draggingId === entry.id ? ' dex-row-dragging' : '') + (dragOverId === entry.id && draggingId !== entry.id ? ' dex-row-drop' : '')
+      const rowClass = 'dex-row'
+        + (isActive ? '' : ' dex-row-inactive')
+        + (draggingId === entry.id ? ' dex-row-dragging' : '')
+        + (dragOverId === entry.id && draggingId !== entry.id ? ' dex-row-drop' : '')
       const row = react.createElement('tr', {
         key: entry.id,
         className: rowClass,
@@ -456,10 +484,23 @@ export function factory(require) {
             onChange: (event) => setReplaceDrafts((current) => Object.assign({}, current, { [entry.id]: event.target.value })),
           })
           : react.createElement('div', null,
-            react.createElement('div', { className: 'dex-key' }, isRevealed ? revealed[entry.id] : entry.masked),
+            react.createElement('div', { className: 'dex-keyline' },
+              react.createElement('div', { className: 'dex-key' }, isRevealed ? revealed[entry.id] : entry.masked),
+              react.createElement('button', {
+                type: 'button',
+                className: 'dex-status ' + (isActive ? 'dex-status-on' : 'dex-status-off'),
+                role: 'switch',
+                'aria-checked': isActive,
+                'aria-label': t('keys.activeToggle'),
+                title: isActive ? t('keys.activeTitle') : t('keys.inactiveTitle'),
+                disabled: managerBusy,
+                onClick: () => toggleActive(entry.id, !isActive),
+              }, isActive ? t('keys.active') : t('keys.inactive'))
+            ),
             react.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 6, marginTop: 3, flexWrap: 'wrap' } },
               entry.primary ? react.createElement('span', { className: 'dex-dot', title: t('keys.primaryTitle') }) : null,
               entry.primary ? react.createElement('span', { className: 'dex-small' }, t('keys.primary')) : null,
+              isActive ? null : react.createElement('span', { className: 'dex-small' }, inactiveReasonText(entry, t)),
               react.createElement('span', { className: 'dex-small' }, sourceText)
             )
           )
@@ -531,12 +572,20 @@ export function factory(require) {
       react.createElement('section', { style: sectionStyle },
         react.createElement('div', { style: sectionHeadStyle },
           react.createElement('h3', { style: h3Style }, t('keys.title')),
-          react.createElement('span', { className: 'dex-small' }, sourceText)
+          react.createElement('span', { className: 'dex-small' },
+            t('keys.activeCount').replace('{active}', String(activeCount)).replace('{total}', String(server.keys.length))
+              + ' · ' + sourceText)
         ),
         react.createElement('p', { style: pStyle }, t('keys.subtitle')),
         keysReadOnly
           ? react.createElement('p', { className: 'dex-small', role: 'status' },
             t('keys.readOnly') + ': ' + (server.source === 'primary' ? t('keys.readOnlyReasonPrimary') : t('keys.readOnlyReasonList')))
+          : null,
+        server.keys.length > 0 && activeCount === 0
+          ? react.createElement('p', {
+            style: { margin: 0, fontSize: 12, lineHeight: 1.5, color: 'var(--dsw-alias-state-warn-primary)' },
+            role: 'alert',
+          }, t('keys.allInactive'))
           : null,
         server.keys.length === 0
           ? react.createElement('p', { style: pStyle }, t('keys.empty'))

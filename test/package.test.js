@@ -26,6 +26,21 @@ test('package manifest declares the bundle, client, and display resources', () =
   assert.match(pkg.engines.node, />=22/u)
 })
 
+test('package manifest declares the whole DSH 0.2.1 line', () => {
+  const pkg = json('package.json')
+  const range = '>=0.2.1-0 <0.2.2-0'
+  assert.equal(pkg.engines.dsh, range)
+  assert.equal(pkg.dsh.compatibility.dsh, range)
+  assert.equal(pkg.peerDependencies['@deepseek-ai/dsh-home-paths'], range)
+  assert.equal(pkg.peerDependencies['@deepseek-ai/dsh-tools'], range)
+  assert.deepEqual(Object.keys(pkg.dsh.compatibility.dshReleases), ['0.2.1-rc.3', '0.2.1-rc.5'])
+})
+
+test('Exa requests carry the current package version as the user agent', () => {
+  const pkg = json('package.json')
+  assert.ok(read('src/exa-client.js').includes(`dsh-exa/${pkg.version}`))
+})
+
 test('cordis patch inserts exactly one dsh-exa row', () => {
   const patch = read('cordis.patch.yml')
   assert.match(patch, /id: dsh-exa/u)

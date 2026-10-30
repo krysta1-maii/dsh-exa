@@ -72,23 +72,40 @@ export function keyId(value) {
 /**
  * Snapshot the starting order for one call.
  *
- * Priority always starts at the first key. Round-robin starts at the shared
- * cursor and advances it exactly once for this call. Both return a fresh array
- * so a later credential write cannot mutate an in-flight order.
+ * Priority starts at the first active key and continues to the end of the
+ * list. Round-robin starts at the first active key at or after the shared
+ * cursor, wraps once, and advances the cursor exactly once for this call.
+ * Inactive keys are omitted from the order but still occupy their list slot,
+ * so enabling or disabling one does not renumber the others.
+ *
+ * Both return a fresh array so a later credential write cannot mutate an
+ * in-flight order.
  */
-export function selectKeyOrder(values, strategy, cursor) {
+export function selectKeyOrder(values, strategy, cursor, activeFlags) {
   const keys = Array.isArray(values) ? values.slice() : []
-  if (keys.length === 0) return { order: [], nextCursor: 0 }
-  if (strategy !== 'round-robin') {
-    return { order: keys, nextCursor: 0 }
-  }
   const n = keys.length
+  if (n === 0) return { order: [], nextCursor: 0 }
+  const isActive = (index) => !Array.isArray(activeFlags) || activeFlags[index] !== false
+  if (strategy !== 'round-robin') {
+    return { order: keys.filter((_value, index) => isActive(index)), nextCursor: 0 }
+  }
   const c = Number.isFinite(cursor) ? Math.trunc(cursor) : 0
   const start = ((c % n) + n) % n
-  return {
-    order: [...keys.slice(start), ...keys.slice(0, start)],
-    nextCursor: (start + 1) % n,
+  let first = -1
+  for (let offset = 0; offset < n; offset += 1) {
+    const index = (start + offset) % n
+    if (isActive(index)) {
+      first = index
+      break
+    }
   }
+  if (first < 0) return { order: [], nextCursor: 0 }
+  const order = []
+  for (let offset = 0; offset < n; offset += 1) {
+    const index = (first + offset) % n
+    if (isActive(index)) order.push(keys[index])
+  }
+  return { order, nextCursor: (first + 1) % n }
 }
 
 /**

@@ -60,6 +60,17 @@ test('round-robin snapshots the cursor and advances exactly once', () => {
   assert.deepEqual(selectKeyOrder([], 'round-robin', 5), { order: [], nextCursor: 0 })
 })
 
+test('inactive keys are omitted without renumbering the active order', () => {
+  const active = [true, false, true]
+  assert.deepEqual(selectKeyOrder([A, B, C], 'priority', 0, active), { order: [A, C], nextCursor: 0 })
+  assert.deepEqual(selectKeyOrder([A, B, C], 'priority', 2, active), { order: [A, C], nextCursor: 0 })
+  assert.deepEqual(selectKeyOrder([A, B, C], 'round-robin', 0, active), { order: [A, C], nextCursor: 1 })
+  assert.deepEqual(selectKeyOrder([A, B, C], 'round-robin', 1, active), { order: [C, A], nextCursor: 0 })
+  assert.deepEqual(selectKeyOrder([A, B, C], 'round-robin', 2, active), { order: [C, A], nextCursor: 0 })
+  assert.deepEqual(selectKeyOrder([A, B, C], 'round-robin', 0, [false, false, false]), { order: [], nextCursor: 0 })
+  assert.deepEqual(selectKeyOrder([A, B, C], 'priority', 0, [false, true, false]), { order: [B], nextCursor: 0 })
+})
+
 test('selectKeyOrder returns a fresh array', () => {
   const values = [A, B]
   const result = selectKeyOrder(values, 'priority', 0)

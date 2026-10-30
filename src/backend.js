@@ -120,12 +120,17 @@ async function managerPayload(credentials) {
     add: permissions.list,
     edit,
   }
+  const keys = keyEntries(values, state, writable)
+  const activeCount = keys.filter((entry) => entry.active).length
   return {
     ok: true,
-    keys: keyEntries(values, state, writable),
+    keys,
     source,
     strategy: state.strategy,
     writable,
+    activeCount,
+    inactiveCount: keys.length - activeCount,
+    allInactive: keys.length > 0 && activeCount === 0,
     updatedAt: state.updatedAt,
   }
 }
@@ -173,8 +178,17 @@ function stateSavedAt(state, id, now) {
   state.keySavedAt[id] = now
 }
 
+function markInactiveEntry(state, id, reason, now) {
+  state.inactiveKeys[id] = { reason, at: now }
+}
+
+function removeInactiveEntry(state, id) {
+  delete state.inactiveKeys[id]
+}
+
 function removeStateEntry(state, id) {
   delete state.keySavedAt[id]
+  delete state.inactiveKeys[id]
 }
 
 function updateStateSafely(ctx, mutator) {
@@ -205,7 +219,11 @@ async function addKeys(ctx, credentials, body) {
   })
   const now = new Date().toISOString()
   updateStateSafely(ctx, (state) => {
-    for (const value of added) stateSavedAt(state, keyId(value), now)
+    for (const value of added) {
+      const id = keyId(value)
+      stateSavedAt(state, id, now)
+      removeInactiveEntry(state, id)
+    }
     return state
   })
   return { ...(await managerPayload(credentials)), added: added.length }
@@ -241,6 +259,7 @@ async function replaceKey(ctx, credentials, body) {
   const now = new Date().toISOString()
   updateStateSafely(ctx, (state) => {
     removeStateEntry(state, id)
+    removeInactiveEntry(state, keyId(value))
     stateSavedAt(state, keyId(value), now)
     return state
   })
@@ -317,6 +336,34 @@ async function setStrategy(ctx, credentials, body) {
   return managerPayload(credentials)
 }
 
+/**
+ * Local active flag for one key. This never touches credential storage, so it
+ * also works for keys supplied read-only by the launching environment.
+ */
+async function setKeyActive(credentials, body) {
+  const id = typeof body.id === 'string' ? body.id.trim() : ''
+  if (id.length === 0) throw new ManagerError('invalid_value', 'id is required')
+  if (typeof body.active !== 'boolean') throw new ManagerError('invalid_value', 'active must be a boolean')
+  const { values } = await collectStoredKeys(credentials)
+  if (!values.some((value) => keyId(value) === id)) {
+    throw new ManagerError('key_not_found', 'key not found', 404)
+  }
+  try {
+    updateManagerState((state) => {
+      if (body.active) removeInactiveEntry(state, id)
+      else markInactiveEntry(state, id, 'manual', new Date().toISOString())
+      return state
+    })
+  } catch (error) {
+    throw new ManagerError(
+      'save_failed',
+      'could not persist the key state: ' + (error instanceof Error ? error.message : String(error)),
+      500,
+    )
+  }
+  return managerPayload(credentials)
+}
+
 async function managerRoute(ctx, credentials, req, res) {
   if (credentials === undefined || credentials === null) {
     sendJson(res, 500, { ok: false, code: 'credentials_unavailable', error: 'credentials service unavailable' })
@@ -355,6 +402,9 @@ async function managerRoute(ctx, credentials, req, res) {
       break
     case 'setStrategy':
       payload = await setStrategy(ctx, credentials, body)
+      break
+    case 'setKeyActive':
+      payload = await setKeyActive(credentials, body)
       break
     default:
       throw new ManagerError('invalid_action', 'unsupported action')

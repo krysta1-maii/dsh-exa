@@ -1,13 +1,15 @@
 /**
  * Exa HTTP transport, error classification, key failover, and warning logging.
  *
- * Failover is deliberately narrow: only 401, 402, and 429 move to another key.
- * 402 covers both exhausted credits and a key or team budget being exceeded.
- * Timeouts, caller cancellation, and network failures are surfaced immediately.
+ * Failover is deliberately narrow: only 401, 402, and 429 move to another
+ * key. A 402 additionally marks that key inactive, because it means exhausted
+ * credits or a key or team budget being exceeded; the key stays out of routing
+ * until a user re-enables it in the management card. Timeouts, caller
+ * cancellation, and network failures are surfaced immediately.
  */
 import { collectStoredKeys } from './key-manager.js'
-import { selectKeyOrder } from './lib.js'
-import { readManagerState } from './state.js'
+import { keyId, selectKeyOrder } from './lib.js'
+import { isKeyInactive, readManagerState, updateManagerState } from './state.js'
 
 export const EXA_BASE_URL = 'https://api.exa.ai'
 export const RETRYABLE_STATUSES = new Set([401, 402, 429])
@@ -146,7 +148,7 @@ export async function callExaOperation(path, body, key, { signal, timeoutMs = 60
       'content-type': 'application/json',
       accept: 'application/json',
       authorization: 'Bearer ' + key,
-      'user-agent': 'dsh-exa/0.2.0',
+      'user-agent': 'dsh-exa/0.3.1',
     },
     body: JSON.stringify(body),
     signal,
@@ -184,12 +186,64 @@ function log(ctx, level, message, ...args) {
   }
 }
 
+/** Mark one key inactive after Exa reports HTTP 402. */
+function markKeyInactive(ctx, operation, id) {
+  try {
+    updateManagerState((state) => {
+      state.inactiveKeys[id] = { reason: 'http_402', at: new Date().toISOString() }
+      return state
+    })
+    log(ctx, 'info', 'dsh-exa: %s marked one key inactive after HTTP 402', operation)
+  } catch (error) {
+    log(
+      ctx,
+      'warn',
+      'dsh-exa: could not mark a key inactive after HTTP 402: %s',
+      error instanceof Error ? error.message : String(error),
+    )
+  }
+}
+
+/**
+ * The model-facing 402 used when no configured key may be tried.
+ *
+ * Exa itself returns 402 for exhausted credits and exceeded budgets. Once
+ * every key is inactive there is no request left to make, so the tool reports
+ * the same status and points at the Billing dashboard and the key card.
+ */
+function paymentRequiredError(operation, last) {
+  const details = []
+  if (last !== null && last !== undefined) {
+    if (last.requestId !== undefined) details.push('requestId ' + last.requestId)
+    if (last.tag !== undefined) details.push('tag ' + last.tag)
+    if (typeof last.message === 'string' && last.message.length > 0) details.push(last.message)
+  }
+  const suffix = details.length > 0 ? ' — ' + details.join(' — ') : ''
+  const afterPaymentFailure = last !== null && last !== undefined
+  const remediation = afterPaymentFailure
+    ? 'Add credits at https://dashboard.exa.ai/billing and re-enable at least one key in the Exa card on the Plugins page.'
+    : 'Re-enable at least one key in the Exa card on the Plugins page; if a previous HTTP 402 exhausted credits or a budget, add credits at https://dashboard.exa.ai/billing.'
+  return new ExaApiError(
+    'exa_' + operation + ': HTTP 402 — payment required. All configured Exa API keys are inactive'
+      + (afterPaymentFailure ? ' after an HTTP 402 response' : '') + suffix + '. ' + remediation,
+    {
+      status: 402,
+      code: 'payment_required',
+      requestId: last !== null && last !== undefined ? last.requestId : undefined,
+      tag: last !== null && last !== undefined ? last.tag : undefined,
+      operation,
+    },
+  )
+}
+
 /**
  * Run one operation through the configured key order.
  *
- * The order is snapshotted before the first request. Every distinct key is
- * tried at most once. The round-robin cursor advances once per call, even when
- * the first key succeeds.
+ * The order is snapshotted before the first request. Only active keys enter
+ * that order; every distinct key is tried at most once. The round-robin cursor
+ * advances once per call, even when the first key succeeds. A 402 disables the
+ * key that produced it; when that leaves no active key, the call ends with an
+ * HTTP 402 payment-required error instead of an aggregate failure.
  */
 export async function performWithFailover(ctx, rotation, { operation, path, body, timeoutMs, exec }) {
   const credentials = ctx.get('credentials')
@@ -201,8 +255,14 @@ export async function performWithFailover(ctx, rotation, { operation, path, body
     )
   }
   const state = readManagerState()
-  const selected = selectKeyOrder(values, state.strategy, rotation.cursor)
+  const activeFlags = values.map((value) => !isKeyInactive(state, keyId(value)))
+  const selected = selectKeyOrder(values, state.strategy, rotation.cursor, activeFlags)
   rotation.cursor = selected.nextCursor
+  if (selected.order.length === 0) {
+    log(ctx, 'warn', 'dsh-exa: %s skipped because every configured key is inactive', operation)
+    throw paymentRequiredError(operation, null)
+  }
+  const attempted = selected.order.map((value) => ({ id: keyId(value), active: true }))
   let last = null
   for (let index = 0; index < selected.order.length; index += 1) {
     const started = Date.now()
@@ -217,6 +277,13 @@ export async function performWithFailover(ctx, rotation, { operation, path, body
     }
     last = outcome
     log(ctx, 'info', 'dsh-exa: %s key %d/%d returned HTTP %d', operation, index + 1, selected.order.length, outcome.status)
+    if (outcome.status === 402) {
+      markKeyInactive(ctx, operation, attempted[index].id)
+      attempted[index].active = false
+      if (attempted.every((item) => !item.active)) {
+        throw paymentRequiredError(operation, outcome)
+      }
+    }
   }
   const details = []
   if (last !== null && last.requestId !== undefined) details.push('requestId ' + last.requestId)
@@ -225,7 +292,7 @@ export async function performWithFailover(ctx, rotation, { operation, path, body
   const suffix = details.length > 0 ? ' — ' + details.join(' — ') : ''
   const statusValue = last !== null ? last.status : 0
   throw new ExaApiError(
-    'exa_' + operation + ': all ' + selected.order.length + ' configured key(s) failed with HTTP ' + statusValue + suffix
+    'exa_' + operation + ': all ' + selected.order.length + ' active key(s) failed with HTTP ' + statusValue + suffix
       + '. A team-level credit or budget failure (HTTP 402) may affect every key in the same team.',
     {
       status: statusValue,

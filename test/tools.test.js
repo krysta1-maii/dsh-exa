@@ -6,7 +6,8 @@ import { after, beforeEach, test } from 'node:test'
 import { validateJsonSchemaValue } from '@deepseek-ai/dsh-tools'
 
 import { installTools } from '../src/tools.js'
-import { writeManagerState } from '../src/state.js'
+import { readManagerState, writeManagerState } from '../src/state.js'
+import { keyId } from '../src/lib.js'
 import { makeCredentials, makeCtx } from './helpers.js'
 
 const HOME = mkdtempSync(join(tmpdir(), 'dsh-exa-tools-'))
@@ -31,12 +32,16 @@ function exec() {
   return { signal: new AbortController().signal }
 }
 
-function install(keys = [A, B], strategy = 'priority') {
-  writeManagerState({ strategy })
+function install(keys = [A, B], strategy = 'priority', state = {}) {
+  writeManagerState({ ...state, strategy })
   const credentials = makeCredentials({ refs: { EXA_API_KEYS: keys.join(',') } })
   const { ctx, tools, sections } = makeCtx({ credentials })
   const dispose = installTools(ctx)
   return { credentials, ctx, tools, sections, dispose }
+}
+
+function manualInactive(id) {
+  return { [id]: { reason: 'manual', at: '2026-10-29T12:00:00.000Z' } }
 }
 
 async function withFetch(stub, run) {
@@ -126,6 +131,8 @@ test('401, 402, and 429 fail over in list order; each key is tried once', async 
 
   assert.deepEqual(seen, ['Bearer ' + A, 'Bearer ' + B, 'Bearer ' + C])
   assert.equal(result.results.length, 1)
+  assert.equal(readManagerState().inactiveKeys[keyId(B)].reason, 'http_402')
+  assert.equal(readManagerState().inactiveKeys[keyId(A)], undefined)
 })
 
 test('429 also fails over without changing the request body', async () => {
@@ -156,6 +163,7 @@ test('non-retryable 400 fails immediately and preserves requestId/tag', async ()
     },
   )
   assert.equal(calls, 1)
+  assert.deepEqual(readManagerState().inactiveKeys, {})
 })
 
 test('all retryable failures produce one aggregate error with the last diagnostics', async () => {
@@ -164,18 +172,19 @@ test('all retryable failures produce one aggregate error with the last diagnosti
   await assert.rejects(
     () => withFetch(async () => {
       calls += 1
-      return jsonResponse({ requestId: 'last_' + calls, error: 'quota', tag: 'QUOTA' }, 402)
+      return jsonResponse({ requestId: 'last_' + calls, error: 'rate', tag: 'RATE_LIMIT' }, calls === 1 ? 401 : 429)
     }, async () => tools.get('exa_search').execute({ query: 'q' }, exec())),
     (error) => {
-      assert.match(error.message, /all 2 configured key/u)
+      assert.match(error.message, /all 2 active key/u)
       assert.match(error.message, /last_2/u)
-      assert.match(error.message, /QUOTA/u)
+      assert.match(error.message, /RATE_LIMIT/u)
       assert.equal(error.message.includes(A), false)
       assert.equal(error.message.includes(B), false)
       return true
     },
   )
   assert.equal(calls, 2)
+  assert.deepEqual(readManagerState().inactiveKeys, {})
 })
 
 test('network failure does not fail over', async () => {
@@ -243,6 +252,151 @@ test('round-robin failover continues from the selected start and wraps', async (
     return jsonResponse(SEARCH_OK)
   }, async () => tools.get('exa_search').execute({ query: 'one' }, exec()))
   assert.deepEqual(seen, ['Bearer ' + A, 'Bearer ' + B])
+})
+
+test('priority routing skips inactive keys during failover', async () => {
+  const { tools } = install([A, B, C], 'priority', { inactiveKeys: manualInactive(keyId(B)) })
+  const seen = []
+  const result = await withFetch(async (url, init) => {
+    seen.push(init.headers.authorization)
+    if (seen.length === 1) return jsonResponse({ requestId: 'r1', error: 'rate', tag: 'RATE_LIMIT' }, 401)
+    return jsonResponse(SEARCH_OK)
+  }, async () => tools.get('exa_search').execute({ query: 'q' }, exec()))
+  assert.deepEqual(seen, ['Bearer ' + A, 'Bearer ' + C])
+  assert.equal(result.results.length, 1)
+})
+
+test('round-robin advances only across active keys', async () => {
+  const { tools } = install([A, B, C], 'round-robin', { inactiveKeys: manualInactive(keyId(B)) })
+  const seen = []
+  await withFetch(async (url, init) => {
+    seen.push(init.headers.authorization)
+    return jsonResponse(SEARCH_OK)
+  }, async () => {
+    await tools.get('exa_search').execute({ query: 'one' }, exec())
+    await tools.get('exa_search').execute({ query: 'two' }, exec())
+    await tools.get('exa_search').execute({ query: 'three' }, exec())
+  })
+  assert.deepEqual(seen, ['Bearer ' + A, 'Bearer ' + C, 'Bearer ' + A])
+})
+
+test('HTTP 402 disables that key and failover continues to the next active key', async () => {
+  const { tools } = install([A, B, C])
+  const seen = []
+  const result = await withFetch(async (url, init) => {
+    seen.push(init.headers.authorization)
+    if (seen.length === 1) return jsonResponse({ requestId: 'pay_1', error: 'budget', tag: 'BUDGET_EXCEEDED' }, 402)
+    return jsonResponse(SEARCH_OK)
+  }, async () => tools.get('exa_search').execute({ query: 'q' }, exec()))
+  assert.deepEqual(seen, ['Bearer ' + A, 'Bearer ' + B])
+  const state = readManagerState()
+  assert.equal(state.inactiveKeys[keyId(A)].reason, 'http_402')
+  assert.equal(state.inactiveKeys[keyId(B)], undefined)
+  assert.equal(result.results.length, 1)
+})
+
+test('every key inactive returns HTTP 402 payment required without a request', async () => {
+  const { tools } = install([A, B], 'priority', {
+    inactiveKeys: { ...manualInactive(keyId(A)), ...manualInactive(keyId(B)) },
+  })
+  let calls = 0
+  await assert.rejects(
+    () => withFetch(async () => {
+      calls += 1
+      return jsonResponse(SEARCH_OK)
+    }, async () => tools.get('exa_search').execute({ query: 'q' }, exec())),
+    (error) => {
+      assert.equal(error.status, 402)
+      assert.equal(error.code, 'payment_required')
+      assert.match(error.message, /HTTP 402/u)
+      assert.match(error.message, /payment required/u)
+      assert.match(error.message, /dashboard\.exa\.ai\/billing/u)
+      assert.equal(error.message.includes(A), false)
+      return true
+    },
+  )
+  assert.equal(calls, 0)
+})
+
+test('all active keys returning 402 ends with payment required and leaves every key inactive', async () => {
+  const { tools } = install([A, B])
+  let calls = 0
+  await assert.rejects(
+    () => withFetch(async () => {
+      calls += 1
+      return jsonResponse({ requestId: 'pay_' + calls, error: 'credits', tag: 'OUT_OF_CREDITS' }, 402)
+    }, async () => tools.get('exa_search').execute({ query: 'q' }, exec())),
+    (error) => {
+      assert.equal(error.status, 402)
+      assert.equal(error.code, 'payment_required')
+      assert.match(error.message, /HTTP 402/u)
+      assert.match(error.message, /payment required/u)
+      assert.match(error.message, /pay_2/u)
+      assert.match(error.message, /OUT_OF_CREDITS/u)
+      return true
+    },
+  )
+  assert.equal(calls, 2)
+  const state = readManagerState()
+  assert.equal(state.inactiveKeys[keyId(A)].reason, 'http_402')
+  assert.equal(state.inactiveKeys[keyId(B)].reason, 'http_402')
+})
+
+test('priority starts at the first active key when the first key is inactive', async () => {
+  const { tools } = install([A, B], 'priority', { inactiveKeys: manualInactive(keyId(A)) })
+  const seen = []
+  await withFetch(async (url, init) => {
+    seen.push(init.headers.authorization)
+    return jsonResponse(SEARCH_OK)
+  }, async () => tools.get('exa_search').execute({ query: 'q' }, exec()))
+  assert.deepEqual(seen, ['Bearer ' + B])
+})
+
+test('a call after every key was deactivated returns 402 without touching Exa', async () => {
+  const { tools } = install([A, B])
+  let calls = 0
+  await assert.rejects(
+    () => withFetch(async () => {
+      calls += 1
+      return jsonResponse({ requestId: 'pay_' + calls, error: 'credits', tag: 'OUT_OF_CREDITS' }, 402)
+    }, async () => tools.get('exa_search').execute({ query: 'first' }, exec())),
+    (error) => error.status === 402 && error.code === 'payment_required',
+  )
+  assert.equal(calls, 2)
+
+  let laterCalls = 0
+  await assert.rejects(
+    () => withFetch(async () => {
+      laterCalls += 1
+      return jsonResponse(SEARCH_OK)
+    }, async () => tools.get('exa_search').execute({ query: 'second' }, exec())),
+    (error) => {
+      assert.equal(error.status, 402)
+      assert.equal(error.code, 'payment_required')
+      assert.equal(error.message.includes(A), false)
+      return true
+    },
+  )
+  assert.equal(laterCalls, 0)
+})
+
+test('a 402 on the only active key returns payment required after one request', async () => {
+  const { tools } = install([A, B], 'priority', { inactiveKeys: manualInactive(keyId(B)) })
+  let calls = 0
+  await assert.rejects(
+    () => withFetch(async () => {
+      calls += 1
+      return jsonResponse({ requestId: 'only_1', error: 'budget', tag: 'BUDGET_EXCEEDED' }, 402)
+    }, async () => tools.get('exa_search').execute({ query: 'q' }, exec())),
+    (error) => {
+      assert.equal(error.status, 402)
+      assert.equal(error.code, 'payment_required')
+      assert.match(error.message, /only_1/u)
+      return true
+    },
+  )
+  assert.equal(calls, 1)
+  assert.equal(readManagerState().inactiveKeys[keyId(A)].reason, 'http_402')
 })
 
 test('advanced search maps nested contents and keeps bounded output', async () => {

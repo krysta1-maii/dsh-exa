@@ -50,6 +50,11 @@ test('GET lists keys in stored order with masks, IDs, and permissions', async ()
   assert.deepEqual(res.body.keys.map((entry) => entry.masked), [A, B, C].map((value) => value.slice(0, 8) + '…' + value.slice(-4)))
   assert.equal(res.body.keys[0].primary, true)
   assert.equal(res.body.keys[0].id, keyId(A))
+  assert.equal(res.body.keys.every((entry) => entry.active === true), true)
+  assert.equal(res.body.keys.every((entry) => entry.inactiveReason === null), true)
+  assert.equal(res.body.activeCount, 3)
+  assert.equal(res.body.inactiveCount, 0)
+  assert.equal(res.body.allInactive, false)
   assert.equal(res.body.writable.add, true)
   assert.equal(res.body.writable.edit, true)
   assert.equal(res.body.writable.service, undefined)
@@ -129,6 +134,86 @@ test('reorder requires the complete current set exactly once', async () => {
   assert.equal(bad.status, 409)
   assert.equal(bad.body.code, 'invalid_order')
   assert.equal(credentials.store.get('EXA_API_KEYS'), [C, A, B].join(','))
+})
+
+test('setKeyActive toggles local state even when credentials are read-only', async () => {
+  const { routes, credentials } = setup({ writable: { EXA_API_KEYS: false, EXA_API_KEY: false } })
+  const before = credentials.store.get('EXA_API_KEYS')
+  const off = await manager(routes, 'POST', '/api/exa-manager', { action: 'setKeyActive', id: keyId(B), active: false })
+  assert.equal(off.status, 200)
+  assert.equal(off.body.keys[1].active, false)
+  assert.equal(off.body.keys[1].inactiveReason, 'manual')
+  assert.equal(typeof off.body.keys[1].inactiveAt, 'string')
+  assert.equal(off.body.activeCount, 2)
+  assert.equal(off.body.inactiveCount, 1)
+  assert.equal(off.body.allInactive, false)
+  assert.equal(readManagerState().inactiveKeys[keyId(B)].reason, 'manual')
+  assert.equal(credentials.store.get('EXA_API_KEYS'), before)
+
+  const on = await manager(routes, 'POST', '/api/exa-manager', { action: 'setKeyActive', id: keyId(B), active: true })
+  assert.equal(on.status, 200)
+  assert.equal(on.body.keys[1].active, true)
+  assert.equal(on.body.activeCount, 3)
+  assert.equal(readManagerState().inactiveKeys[keyId(B)], undefined)
+})
+
+test('the primary marker follows the first active key', async () => {
+  const { routes } = setup()
+  await manager(routes, 'POST', '/api/exa-manager', { action: 'setKeyActive', id: keyId(A), active: false })
+  const res = await manager(routes, 'GET', '/api/exa-manager')
+  assert.equal(res.body.keys[0].active, false)
+  assert.equal(res.body.keys[0].primary, false)
+  assert.equal(res.body.keys[1].primary, true)
+})
+
+test('the payload reports when every key is inactive', async () => {
+  const { routes } = setup()
+  await manager(routes, 'POST', '/api/exa-manager', { action: 'setKeyActive', id: keyId(A), active: false })
+  await manager(routes, 'POST', '/api/exa-manager', { action: 'setKeyActive', id: keyId(B), active: false })
+  const res = await manager(routes, 'POST', '/api/exa-manager', { action: 'setKeyActive', id: keyId(C), active: false })
+  assert.equal(res.status, 200)
+  assert.equal(res.body.allInactive, true)
+  assert.equal(res.body.activeCount, 0)
+  assert.equal(res.body.inactiveCount, 3)
+  assert.equal(res.body.keys.every((entry) => entry.active === false), true)
+})
+
+test('replace clears the replaced key state and the new key starts active', async () => {
+  const { routes } = setup()
+  await manager(routes, 'POST', '/api/exa-manager', { action: 'setKeyActive', id: keyId(B), active: false })
+  const replacement = 'exa_ffffffffffffffffffffffffffff'
+  const res = await manager(routes, 'POST', '/api/exa-manager', { action: 'replace', id: keyId(B), value: replacement })
+  assert.equal(res.status, 200)
+  assert.equal(res.body.keys[1].active, true)
+  assert.equal(readManagerState().inactiveKeys[keyId(B)], undefined)
+})
+
+test('remove clears inactive state and a re-added key starts active', async () => {
+  const { routes } = setup()
+  await manager(routes, 'POST', '/api/exa-manager', { action: 'setKeyActive', id: keyId(B), active: false })
+  const removed = await manager(routes, 'POST', '/api/exa-manager', { action: 'remove', ids: [keyId(B)] })
+  assert.equal(removed.status, 200)
+  assert.equal(readManagerState().inactiveKeys[keyId(B)], undefined)
+  const added = await manager(routes, 'POST', '/api/exa-manager', { action: 'add', keys: [B] })
+  assert.equal(added.status, 200)
+  const entry = added.body.keys.find((item) => item.id === keyId(B))
+  assert.equal(entry.active, true)
+})
+
+test('setKeyActive validates the key id and boolean flag', async () => {
+  const { routes } = setup()
+  const missing = await manager(routes, 'POST', '/api/exa-manager', {
+    action: 'setKeyActive',
+    id: keyId('exa_ffffffffffffffffffffffffffff'),
+    active: false,
+  })
+  assert.equal(missing.status, 404)
+  assert.equal(missing.body.code, 'key_not_found')
+  const bad = await manager(routes, 'POST', '/api/exa-manager', { action: 'setKeyActive', id: keyId(A), active: 'no' })
+  assert.equal(bad.status, 400)
+  assert.equal(bad.body.code, 'invalid_value')
+  const noId = await manager(routes, 'POST', '/api/exa-manager', { action: 'setKeyActive', active: false })
+  assert.equal(noId.status, 400)
 })
 
 test('strategy persists without changing key order', async () => {

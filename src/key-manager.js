@@ -7,6 +7,7 @@
  * - EXA_API_KEY: single-key fallback, kept in step with the first list item.
  */
 import { keyId, maskValue, parseKeyList } from './lib.js'
+import { inactiveEntry } from './state.js'
 
 export const API_KEYS_REF = 'EXA_API_KEYS'
 export const API_KEY_REF = 'EXA_API_KEY'
@@ -104,12 +105,19 @@ export function keyEntries(values, state, writable) {
   const savedAt = state !== null && state !== undefined && state.keySavedAt !== null && typeof state.keySavedAt === 'object'
     ? state.keySavedAt
     : {}
+  // Priority routing starts at the first active key, so the primary marker
+  // follows that key rather than a fixed list position.
+  const firstActiveIndex = values.findIndex((value) => inactiveEntry(state, keyId(value)) === null)
   return values.map((value, index) => {
     const id = keyId(value)
+    const inactive = inactiveEntry(state, id)
     return {
       id,
       masked: maskValue(value),
-      primary: index === 0,
+      primary: index === firstActiveIndex,
+      active: inactive === null,
+      inactiveReason: inactive === null ? null : inactive.reason,
+      inactiveAt: inactive === null ? null : inactive.at,
       savedAt: typeof savedAt[id] === 'string' ? savedAt[id] : null,
       removable: writable.edit,
       editable: writable.edit,
