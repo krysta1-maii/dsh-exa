@@ -2,6 +2,7 @@
 
 > 2026-10-29 实现变更：Team Management 预算/用量与 service key 已从插件中移除，改为 Exa Billing 快捷入口。以下内容保留为原始施工计划；当前实际行为以 [README](../README.md) 和 [验证记录](./verification.md) 为准。
 > 2026-11-02：0.4.0 将包根入口改为 Host 管理面、新增 `dsh-exa/tools` preset 入口，施工细节与回滚步骤见 [Host / Preset 分离架构升级施工计划](./preset-separation-upgrade-plan.md)。
+> 2026-11-02：0.4.0 的重启后验收已完成，结果符合设计预期；当前状态以 [验证记录](./verification.md) 为准。
 
 ## 1. 项目定位
 

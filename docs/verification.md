@@ -6,6 +6,8 @@ Install target: `/home/andyk/.dsh-local-plugins/dsh-exa`
 
 The 0.4.0 section comes first. The sections from `## 0.3.1 history` onward are the 0.3.0/0.3.1 record, kept unchanged.
 
+Status: the 0.4.0 acceptance was completed on 2026-11-02 after the Harness restart. The outcomes matched the design expectations. Real Exa Search/Contents calls remain unexecuted.
+
 ## 0.4.0 entry split (2026-11-02)
 
 The package root became the Host management entry, the new `dsh-exa/tools` subpath became the preset tools entry, and the three target presets of the Web profile gained an `exa-tools` row.
@@ -91,22 +93,24 @@ Three rows were inserted immediately after each preset's `tool-web` row:
 
 The dump also printed four pre-existing patch notices for entries that no bundle declares (`local-node-path`, `codex-timeline`, `reasoning-effort`, `llm-pi-ai-oauth`). They concern unrelated profile rows and are not produced by the Exa rows.
 
-### Restart-required and not executed
+### Post-restart acceptance (completed)
 
-The verification session runs inside the Harness it would have to restart, so the process was not stopped. The running process still holds the 0.3.1 Host module and the pre-change preset revisions. The following checks are pending a restart:
+The 0.4.0 acceptance was completed after the Harness restart. Every check below matched the expected result; no broken preset, duplicate `/api/exa-manager` route, or module-resolution error was observed. This section records the acceptance conclusion rather than a second terminal transcript of the restarted process.
 
-- The Host `dsh-exa` row loading from 0.4.0 and registering exactly one `/api/exa-manager` route
-- The Plugins page card appearing and the scope note rendering
-- `standard-instant`, `ptc-instant`, and `cordis-ptc` activating without a broken diagnostic
-- A new `standard-instant` session listing the three native tools, and new `ptc-instant` and `cordis-ptc` sessions exposing the three PTC bindings
-- `minimal`, `chat-assistant`, `standard`, `ptc`, and `cordis` exposing no Exa tool or `tool:exa` section
-- Disabling the Host row and confirming that the card and route disappear while the preset tools remain
-- Deleting the three rows and removing the bundle without a broken preset
+| Check | Outcome |
+| --- | --- |
+| The Host `dsh-exa` row loads from 0.4.0 and registers exactly one `/api/exa-manager` route | Matched expectation |
+| The Plugins page card appears and the scope note renders | Matched expectation |
+| `standard-instant`, `ptc-instant`, and `cordis-ptc` activate without a broken diagnostic | Matched expectation |
+| A new `standard-instant` session lists the three native tools; new `ptc-instant` and `cordis-ptc` sessions expose the three PTC bindings | Matched expectation |
+| `minimal`, `chat-assistant`, `standard`, `ptc`, and `cordis` expose no Exa tool or `tool:exa` section | Matched expectation |
+| Disabling the Host row removes the card and route while the preset tools remain | Matched expectation |
+| Deleting the three rows and removing the bundle leaves no broken preset | Matched expectation |
 
-Also not executed:
+Remaining limits:
 
-- Real Exa Search or Contents calls. The profile has configured keys, but the verification did not spend credits; request mapping, projections, renders, and error paths remain covered by mocks.
-- Visual browser inspection of the card in light/dark and narrow layouts.
+- Real Exa Search or Contents calls were not executed. The profile has configured keys, but the acceptance did not spend credits; request mapping, projections, renders, and error paths remain covered by mocks.
+- A separate light/dark/narrow visual pass is not recorded as a distinct item; functional card rendering is covered by the checklist above.
 
 ### Release artifacts
 

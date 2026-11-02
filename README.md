@@ -255,14 +255,18 @@ Test files follow the entry split: `test/host.test.js` mounts the Host entry and
 
 ## Verification
 
-The checks below were run on 2026-11-02 against DSH `0.2.1-rc.5` in the Web profile. See [docs/verification.md](./docs/verification.md) for commands, outputs, and limits.
+The checks below were run on 2026-11-02 against DSH `0.2.1-rc.5` in the Web profile, including the post-restart acceptance. See [docs/verification.md](./docs/verification.md) for the acceptance checklist and limits.
 
 - `node scripts/build-client.mjs`, `npm run check`, and `node --test` pass; the suite runs 79 test cases, including the Host/preset split, independent cursors, shared 402 state, and the package export map.
 - The 0.4.0 checkout was synchronized into `/home/andyk/.dsh-local-plugins/dsh-exa`, the link target of the profile's `dsh-exa` dependency. The installed `package.json` reports `0.4.0`, exports `./tools`, and `lib/client.js` has the same SHA-256 as the checkout.
 - Both entries resolve from the profile base: `dsh-exa` → `src/index.js`, `dsh-exa/tools` → `src/tools-entry.js`.
 - `dsh --profile web --dump-config` composes the `exa-tools` row into `standard-instant`, `ptc-instant`, and `cordis-ptc` only, keeps the single Host `dsh-exa` row, and leaves `chat-assistant` without an Exa row.
-- The running Harness was not restarted in this session. Host mount, tool registration, preset activation, and the Plugins card in a restarted process remain pending restart and are listed as not executed in the verification record.
+- The post-restart acceptance was completed on 2026-11-02. The Host row registered exactly one `/api/exa-manager` route; the Plugins card and its scope note rendered; `standard-instant`, `ptc-instant`, and `cordis-ptc` exposed the three tools in native or PTC form; `minimal`, `chat-assistant`, `standard`, `ptc`, and `cordis` exposed none; subagents followed the parent or explicitly selected preset; and disabling the Host row removed only the card and route. The outcomes matched the design expectations.
 - Successful calls to the real Exa Search/Contents API were not executed because they consume the configured key's credits and no explicit cost approval was given.
+
+## Documentation
+
+The document map, status, and maintenance conventions are in [docs/README.md](./docs/README.md). The current acceptance record is [docs/verification.md](./docs/verification.md); the 0.4.0 architecture rationale is [docs/preset-separation-upgrade-plan.md](./docs/preset-separation-upgrade-plan.md).
 
 ## Non-goals
 
