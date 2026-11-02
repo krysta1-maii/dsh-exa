@@ -547,6 +547,7 @@ export function factory(require) {
     return react.createElement('div', { style: { display: 'flex', flexDirection: 'column', gap: 20, minWidth: 0 } },
       react.createElement('style', null, CSS),
       react.createElement('p', { style: pStyle }, t('intro')),
+      react.createElement('p', { className: 'dex-small', style: { margin: 0 } }, t('scope')),
       react.createElement(Notice, { notice }),
       managerBusy ? react.createElement('p', { className: 'dex-small', style: { margin: 0 }, role: 'status' }, react.createElement(Spinner), ' ', t('common.saving')) : null,
       loadError !== null ? react.createElement('p', { style: errorStyle, role: 'alert' }, loadError) : null,

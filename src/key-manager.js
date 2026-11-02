@@ -100,6 +100,35 @@ export async function writeStoredKeys(credentials, values, { source, listWritabl
   if (primaryWritable) await syncPrimary(credentials, values[0])
 }
 
+function log(ctx, level, message, ...args) {
+  const logger = ctx !== undefined && ctx !== null ? ctx.logger : undefined
+  const method = logger !== undefined && logger !== null && typeof logger[level] === 'function' ? logger[level] : undefined
+  if (method === undefined) return
+  try {
+    method.call(logger, message, ...args)
+  } catch {
+    /* Logging must never affect startup or tool registration. */
+  }
+}
+
+/**
+ * Warn once, from the Host management entry, when no Exa key is configured.
+ * Preset tools entries do not run this check, so the warning is not repeated
+ * for every preset that mounts them. The helper reads the credential service
+ * through the existing collectStoredKeys path and never caches a secret.
+ */
+export function warnIfNoKeys(ctx) {
+  const credentials = ctx !== undefined && ctx !== null ? ctx.get('credentials') : undefined
+  if (credentials === undefined || credentials === null) return
+  collectStoredKeys(credentials).then(({ values }) => {
+    if (values.length === 0) {
+      log(ctx, 'warn', 'dsh-exa: no Exa API key is configured; add one through the Exa card on the Plugins page or set EXA_API_KEYS / EXA_API_KEY')
+    }
+  }).catch((error) => {
+    log(ctx, 'warn', 'dsh-exa: credential check failed: %s', error instanceof Error ? error.message : String(error))
+  })
+}
+
 /** Build the manager payload's key rows. */
 export function keyEntries(values, state, writable) {
   const savedAt = state !== null && state !== undefined && state.keySavedAt !== null && typeof state.keySavedAt === 'object'

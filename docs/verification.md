@@ -1,10 +1,131 @@
-# Verification record — dsh-exa 0.3.1
+# Verification record — dsh-exa 0.4.0
 
-Date: 2026-10-29 (functional checks) and 2026-10-31 (compatibility update), Asia/Hong_Kong
-Runtime: DeepSeek Harness 0.2.1-rc.3 for the functional checks; 0.2.1-rc.5 for the compatibility update
+Date: 2026-11-02 (0.4.0 entry split), Asia/Hong_Kong
+Runtime: DeepSeek Harness 0.2.1-rc.5, Web profile
 Install target: `/home/andyk/.dsh-local-plugins/dsh-exa`
 
-## Automated checks
+The 0.4.0 section comes first. The sections from `## 0.3.1 history` onward are the 0.3.0/0.3.1 record, kept unchanged.
+
+## 0.4.0 entry split (2026-11-02)
+
+The package root became the Host management entry, the new `dsh-exa/tools` subpath became the preset tools entry, and the three target presets of the Web profile gained an `exa-tools` row.
+
+### Automated checks
+
+```bash
+node scripts/build-client.mjs
+npm run check
+node --test
+```
+
+Results:
+
+- The client build wrote `lib/client.js` (41,310 characters; 43,380 bytes on disk) and passed `node --check`.
+- `npm run check` passed for all source entries, including the new `src/tools-entry.js`.
+- `node --test` ran 79 test cases: 79 passed, 0 failed, 0 skipped.
+- The tests use a temporary `DSH_HOME`, an in-memory credential service, and a mock `fetch`. No Exa request was made by the automated suite.
+
+Covered by the 0.4.0 tests:
+
+- Host entry: `name` is `dsh-exa`, `inject` is exactly `credentials` and `webServer`, apply registers one `/api/exa-manager` route and no tools or prompt sections, a clean unmount removes the route, a remount after unmount registers one route again, one missing-key warning per mount, and no warning when a key is configured.
+- Tools entry: `name` is `dsh-exa-tools`, `inject` is exactly `tools`, `credentials`, and `systemPrompt`, apply registers `exa_search`, `exa_search_advanced`, `exa_fetch`, and `tool:exa` at order 111, registers no route, unmounts cleanly, and remounts.
+- Two mounted tools entries: round-robin cursors advance independently (`[A, A, B]` for calls on entries one, two, and one), and a 402 in one entry deactivates the shared key so the next call in the other entry uses the remaining key (`[A, B]` then `[B]`).
+- Package manifest: `exports['./tools']` is `./src/tools-entry.js`, the Host source imports `installBackend` and not `installTools`, the preset source imports `installTools` and neither `installBackend` nor `./backend.js`, `cordis.patch.yml` still inserts exactly one `dsh-exa` row, and the locale key sets stay identical.
+- Existing tool, transport, manager, state, client-build, and compatibility tests continue to pass unchanged.
+
+### Package synchronization
+
+The 0.4.0 checkout was synchronized into the existing link target:
+
+```bash
+rsync -a --delete --exclude .git --exclude node_modules --exclude dist \
+  /home/andyk/projects-dsh/dsh-exa/ /home/andyk/.dsh-local-plugins/dsh-exa/
+```
+
+- Installed `package.json` version: `0.4.0`
+- Installed `exports['./tools']`: `./src/tools-entry.js`
+- Installed `src/tools-entry.js` is present
+- The installed `lib/client.js` and the checkout `lib/client.js` both hash to `a49f6d9583f67b959095bd0a54299638a2ea7ff9690a4488afef94bbdba7c868`
+- The profile's `node_modules/dsh-exa` symlink still resolves to `/home/andyk/.dsh-local-plugins/dsh-exa`
+
+### Entry resolution
+
+`createRequire('/home/andyk/.dsh/profiles/web/package.json')` resolves both entries from the profile base:
+
+```json
+{
+  "root": "/home/andyk/.dsh-local-plugins/dsh-exa/src/index.js",
+  "tools": "/home/andyk/.dsh-local-plugins/dsh-exa/src/tools-entry.js"
+}
+```
+
+DSH resolves a linked plugin's own bare imports through its profile-scope interception layer, so `@deepseek-ai/dsh-tools` and `@deepseek-ai/dsh-home-paths` keep resolving for both entries.
+
+### Profile migration
+
+The profile patch `/home/andyk/.dsh/profiles/web/cordis.patch.yml` was edited while the Harness kept running, with a backup written first:
+
+```text
+/home/andyk/.dsh/profiles/web/cordis.patch.yml.bak-before-exa-0.4.0-2026-11-02T02-50-25-043Z
+```
+
+Three rows were inserted immediately after each preset's `tool-web` row:
+
+```yaml
+          - id: exa-tools
+            name: dsh-exa/tools
+```
+
+- `preset-standard-instant`: `exa-tools` between `tool-web` and `present`
+- `preset-ptc-instant`: `exa-tools` between `tool-web` and `tool-presentation`
+- `preset-cordis-ptc`: `exa-tools` between `tool-web` and `tool-cordis`
+- `preset-chat-assistant` was not changed
+- No preset mounts the package root `dsh-exa` as a tool row
+
+`dsh --profile web --dump-config` exited 0 and composed the configuration:
+
+- Exactly one Host row: `- id: dsh-exa` / `name: dsh-exa`
+- `exa-tools` / `dsh-exa/tools` appears inside `preset-standard-instant`, `preset-ptc-instant`, and `preset-cordis-ptc`, and nowhere else
+- No `exa-tools` row appears between the `preset-chat-assistant` and `preset-cordis-ptc` headers
+- No composition error or duplicate-entry diagnostic was printed for these rows
+
+The dump also printed four pre-existing patch notices for entries that no bundle declares (`local-node-path`, `codex-timeline`, `reasoning-effort`, `llm-pi-ai-oauth`). They concern unrelated profile rows and are not produced by the Exa rows.
+
+### Restart-required and not executed
+
+The verification session runs inside the Harness it would have to restart, so the process was not stopped. The running process still holds the 0.3.1 Host module and the pre-change preset revisions. The following checks are pending a restart:
+
+- The Host `dsh-exa` row loading from 0.4.0 and registering exactly one `/api/exa-manager` route
+- The Plugins page card appearing and the scope note rendering
+- `standard-instant`, `ptc-instant`, and `cordis-ptc` activating without a broken diagnostic
+- A new `standard-instant` session listing the three native tools, and new `ptc-instant` and `cordis-ptc` sessions exposing the three PTC bindings
+- `minimal`, `chat-assistant`, `standard`, `ptc`, and `cordis` exposing no Exa tool or `tool:exa` section
+- Disabling the Host row and confirming that the card and route disappear while the preset tools remain
+- Deleting the three rows and removing the bundle without a broken preset
+
+Also not executed:
+
+- Real Exa Search or Contents calls. The profile has configured keys, but the verification did not spend credits; request mapping, projections, renders, and error paths remain covered by mocks.
+- Visual browser inspection of the card in light/dark and narrow layouts.
+
+### Release artifacts
+
+```bash
+npm_config_cache=.tmp/npm-cache npm pack --pack-destination dist --offline
+```
+
+- `dist/dsh-exa-0.4.0.tgz` — 22 files. It contains `src/tools-entry.js`, the Host-only `src/index.js`, `lib/client.js`, both locale files, `cordis.patch.yml`, and the three docs.
+- `dist/dsh-exa-0.4.0-source.zip` — top-level directory `dsh-exa-0.4.0/`, including `test/tools-entry.test.js`.
+- `dist/SHA256SUMS` lists both 0.4.0 artifacts and keeps the 0.3.1 entries. The file, not this record, is the authority for the current values; rebuilding an artifact always rewrites it.
+- The tarball was extracted to a scratch directory, `node --check` passed for both entries, and the extracted manifest reports version `0.4.0`, `main: ./src/index.js`, and `exports['./tools']: ./src/tools-entry.js`.
+
+### Rollback
+
+To return to 0.3.1, stop the Harness, delete the three `exa-tools` rows, restore the 0.3.1 package, and start. The profile patch backup above restores the exact pre-migration preset declarations.
+
+## 0.3.1 history (2026-10-29 / 2026-10-31)
+
+### Automated checks
 
 ```bash
 node scripts/build-client.mjs
@@ -35,7 +156,7 @@ Covered by tests:
 - Host mount and unmount: three tools, one route, and one prompt section appear and disappear without duplicates.
 - Manifest compatibility: `engines.dsh`, the two DSH peer ranges, `dsh.compatibility.dsh`, and the `dshReleases` keys.
 
-## Compatibility checks (2026-10-31)
+### Compatibility checks (2026-10-31)
 
 The compatibility declarations were changed to cover the whole DSH `0.2.1` line:
 
@@ -55,7 +176,7 @@ The range was evaluated against the semver library used by that host, once with 
 
 No Harness process was started on any 0.2.1 release other than rc.3 and rc.5. These decisions are range evaluations, not runtime sessions.
 
-## Bundle installation (0.3.0, 2026-10-29)
+### Bundle installation (0.3.0, 2026-10-29)
 
 The previous bundle was removed, then the updated package was installed from the local plugin directory:
 
@@ -69,7 +190,7 @@ The previous bundle was removed, then the updated package was installed from the
 
 The installed `package.json` reports `0.3.0`, and the profile's dependency and resolved `node_modules/dsh-exa` link both point at the local plugin directory.
 
-## 0.3.1 installation (2026-10-31)
+### 0.3.1 installation (2026-10-31)
 
 The 0.3.1 checkout was synchronized into the same link target with `rsync -a --delete`, excluding `.git` and `node_modules`. No plugin-manager removal or installation ran for this version; the profile dependency remains `link:/home/andyk/.dsh-local-plugins/dsh-exa`.
 
@@ -83,7 +204,7 @@ The 0.3.1 checkout was synchronized into the same link target with `rsync -a --d
 
 The running Harness process continued to use the 0.3.0 Host code. No restart was performed, so the 0.3.1 Host module has not been imported by the live process.
 
-## Live Host checks (0.3.0, 2026-10-29)
+### Live Host checks (0.3.0, 2026-10-29)
 
 The checks in this section and in Live route checks were recorded on 0.3.0 with DSH `0.2.1-rc.3`. The 0.3.1 package has not been loaded by a restarted Harness; its 0.3.1 changes relative to 0.3.0 are the manifest, the documentation, and the tests.
 
@@ -113,7 +234,7 @@ ToolCallError: query must be a non-empty string
 
 That confirms the installed Host tool is reachable through the PTC surface. The success body and render were exercised with the mock-fetch tests.
 
-## Live route checks
+### Live route checks
 
 `GET /api/exa-manager`:
 
@@ -139,7 +260,7 @@ A follow-up `GET` still reported both keys active, so the new action is dispatch
 
 The installed `lib/client.js` contains the `setKeyActive` request, the active/inactive switch, `keys.activeCount`, and `keys.allInactive`. The old `/api/exa-usage` route remains absent.
 
-## Not executed
+### Not executed
 
 - Real Exa Search or Contents calls. The profile has configured keys, but the verification did not spend credits. Request mapping, projections, renders, and error paths are covered by mocks.
 - A live HTTP 402 response, automatic deactivation, and the all-inactive lockout. Triggering them would consume credits or change the user's key state. The mock-fetch tests cover the persisted `http_402` reason, failover to the next active key, the immediate `payment_required` error, and the no-request 402 on a following call.

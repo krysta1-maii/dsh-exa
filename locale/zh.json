@@ -4,7 +4,7 @@
     "description": "通过 Exa 进行语义搜索和 URL 正文读取，支持多 key 调用策略和 Billing 快捷入口。"
   },
   "card": {
-    "summary": "管理 Exa API key、每个 key 的生效状态、调用策略，以及 Exa Billing 快捷入口。只有生效的 key 参与调用；内置 web_search 不受影响。",
+    "summary": "管理所有 preset 共享的 Exa API key、每个 key 的生效状态和调用策略，以及 Exa Billing 快捷入口。Agent 是否获得 Exa 工具由各 preset 中的 dsh-exa/tools 行决定；内置 web_search 不受影响。",
     "intro": "Exa key 按表中顺序尝试，只有标记为生效的 key 参与。优先级模式每次从第一个生效 key 开始；轮询模式从上一把起始 key 之后的下一个生效 key 开始。遇到 401 或 429 时，本次调用改用下一把生效 key；遇到 402 时该 key 会自动停用。所有 key 均未生效时，Exa 调用直接返回 HTTP 402（需要付费）。内置 web_search 不受影响。",
     "strategy.title": "Key 调用策略",
     "strategy.label": "调用策略",
@@ -80,7 +80,8 @@
     "billing.title": "账单与余额",
     "billing.subtitle": "余额、发票和自动充值在 Exa 控制台管理。返回 HTTP 402 的 key 会自动停用；充值后请回到上方重新启用。此卡片不读取也不显示余额。",
     "billing.open": "打开 Billing",
-    "footer": "Exa 搜索、高级搜索和抓取是附加工具。内置 web_search 与 web_fetch 保留原有 provider 和 schema。",
+    "scope": "此卡片管理所有 preset 共用的 key 列表与调用策略。Agent 工具来自 preset 中的 dsh-exa/tools 行；禁用本 Host 插件行只会移除管理卡片和 /api/exa-manager 路由，不会删除任何 preset 中的 Exa 工具。",
+    "footer": "Exa 搜索、高级搜索和抓取是附加工具，仅在挂载了 dsh-exa/tools 的 preset 中可用。内置 web_search 与 web_fetch 保留原有 provider 和 schema。",
     "common.saving": "保存中…",
     "common.save": "保存",
     "common.cancel": "取消",

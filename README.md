@@ -1,13 +1,35 @@
 # dsh-exa
 
-Exa tools and a Plugins-page management card for DeepSeek Harness. The package adds three model tools — `exa_search`, `exa_search_advanced`, and `exa_fetch` — backed by an ordered multi-key client with per-key active flags and priority or round-robin routing. It also adds a card on the **Plugins** page for key management, active-state toggles, routing strategy, drag or button ordering, and a button that opens the Exa Billing dashboard. Only active keys enter routing; an HTTP 402 response deactivates the key that produced it, and a call made while every key is inactive returns HTTP 402 (payment required) without an Exa request.
+Exa tools and a Plugins-page management card for DeepSeek Harness, delivered as one package with two entries. The Host entry registers the Plugins-page card, its exact `/api/exa-manager` route, and one startup check for a missing Exa key. The preset entry `dsh-exa/tools` registers the three model tools — `exa_search`, `exa_search_advanced`, and `exa_fetch` — plus a short `tool:exa` system-prompt section, backed by an ordered multi-key client with per-key active flags and priority or round-robin routing.
+
+The card manages the key list, per-key active state, the routing strategy, drag or button ordering, and a button that opens the Exa Billing dashboard. Only active keys enter routing; an HTTP 402 response deactivates the key that produced it, and a call made while every key is inactive returns HTTP 402 (payment required) without an Exa request.
 
 The built-in `web_search` and `web_fetch` tools are not replaced. This package never registers a web search provider and never changes `ctx.web`.
 
 - Package name: `dsh-exa`
-- Bundle patch row: `dsh-exa`
+- Host entry: `dsh-exa` (bundle patch row `dsh-exa`)
+- Preset entry: `dsh-exa/tools`
 - Target runtime: DeepSeek Harness 0.2.1-x (every 0.2.1 prerelease and the 0.2.1 release), Node.js 22 or newer
-- Current release: 0.3.1
+- Current release: 0.4.0
+
+## Two entries
+
+| Entry | Mounted by | Owns |
+| --- | --- | --- |
+| `dsh-exa` | The bundle patch, once in the Host composition | The `plugins.bundle.config` card carrier, the exact `/api/exa-manager` route, and the per-mount missing-key warning |
+| `dsh-exa/tools` | Agent presets, once per preset scope | `exa_search`, `exa_search_advanced`, `exa_fetch`, the `tool:exa` prompt section, and that scope's round-robin cursor |
+
+One package, one install, one credential store, one manager state file. The split exists so that the model-facing tools follow the preset a session selects rather than every preset the profile inherits. The Host entry keeps the management route in exactly one place, so several presets can mount the tools entry without registering the same route twice.
+
+`cordis.patch.yml` inserts only the Host row:
+
+```yaml
+- insert:
+    - id: dsh-exa
+      name: dsh-exa
+```
+
+The bundle does not add rows to any preset. DSH 0.2.1-rc.5 bundle patches can append rows to a `group: true` entry whose config is an array; an agent preset keeps its child plugins in `config.plugins`, which the bundle patch format cannot target. Enabling the tools in a preset is an explicit profile edit, described next.
 
 ## Install
 
@@ -17,9 +39,66 @@ Build the browser bundle before installing from a checkout:
 node scripts/build-client.mjs
 ```
 
-Install the directory through **Plugins → Add plugin** in the Web UI, or with the equivalent CLI install against the current profile. The bundle is selected and its `dsh-exa` row is enabled by `plugin_manager install_bundle`. After a source change to the Host half, restart the Harness; client-only changes can reload with the profile's HMR receiver while the Web dev watcher is active.
+Install the directory through **Plugins → Add plugin** in the Web UI, or with the equivalent CLI install against the current profile. The bundle is selected and its `dsh-exa` Host row is enabled by `plugin_manager install_bundle`. The package has no install scripts, and its two DSH peers use the `>=0.2.1-0 <0.2.2-0` range described under Compatibility.
 
-The package has no install scripts. Its peer dependencies are the DSH packages already present in the Harness installation: `@deepseek-ai/cordis`, `@deepseek-ai/dsh-tools`, and `@deepseek-ai/dsh-home-paths`. The two DSH peers use the `>=0.2.1-0 <0.2.2-0` range described under Compatibility.
+The install adds the Host half only. Add the tools entry to each preset that should give its agents the Exa tools. In a preset declaration, place the row next to the existing `tool-web` row so the tool catalog order stays predictable:
+
+```yaml
+          - id: tool-web
+            name: '@deepseek-ai/dsh-tool-web'
+            config:
+              search: true
+              fetch: true
+              searchTimeoutMs: 60000
+          - id: exa-tools
+            name: dsh-exa/tools
+```
+
+The row id `exa-tools` is local to its preset; the same id may appear in several presets. Do not add a `config` block: the tools entry has no configuration and needs none.
+
+After a change to the Host half, restart the Harness. A change to the tools entry is a preset change; treat it as requiring a restart too, because preset revisions are activated eagerly and are not promised to hot-reload. Client-only changes can reload with the profile's HMR receiver while the Web dev watcher is active.
+
+## Preset visibility
+
+The tools entry is mounted per preset, so visibility is a per-preset decision:
+
+| Preset | Exa tools | Presentation |
+| --- | --- | --- |
+| `standard-instant` | Yes | Native tools |
+| `ptc-instant` | Yes | `run_code` TypeScript SDK bindings |
+| `cordis-ptc` | Yes | `run_code` TypeScript SDK bindings |
+| `minimal` | No | Not applicable |
+| `chat-assistant` | No | Not applicable |
+| `standard`, `ptc`, `cordis` | No | Not applicable |
+
+A subagent that omits `preset` inherits its parent's composition, so it gets Exa exactly when the parent preset does. A subagent that names another preset follows that preset's row.
+
+## Upgrade from 0.3.1
+
+0.3.1 registered the tools globally from the Host row, so every preset inherited them. 0.4.0 moves the tools to `dsh-exa/tools`; upgrading the package without adding the preset rows leaves every preset without Exa tools. This is a deliberate behavior change.
+
+The migration changes the package and three preset declarations together, while the Harness is stopped:
+
+1. Stop the Harness.
+2. Install or synchronize 0.4.0 into the existing install location.
+3. Add the `exa-tools` row to `standard-instant`, `ptc-instant`, and `cordis-ptc`, next to each preset's `tool-web` row.
+4. Check that no preset mounts the package root `dsh-exa` as a tool row; presets use `dsh-exa/tools` only.
+5. Start the Harness.
+6. Confirm the three target presets report no broken activation, the Host registers one `/api/exa-manager` route, and a new session in each target preset shows the three tools or their PTC bindings.
+
+Existing sessions resume against the current same-id preset definition after the restart. A session in a preset without the row keeps its historical tool-call messages but receives no Exa tools in new requests.
+
+## Uninstall and rollback
+
+Delete every `dsh-exa/tools` row before removing the package. A preset that still references the subpath after the package is gone fails to resolve and stays broken on the roster. The order is:
+
+1. Stop the Harness.
+2. Remove the `exa-tools` row from every preset that has one.
+3. Remove the bundle with the Plugins page or the equivalent `remove_bundle` action.
+4. Start the Harness.
+5. Confirm no `exa-tools` reference remains.
+
+Rolling back to 0.3.1 is the same operation in reverse, and it must move both halves at once: stop the Harness, delete the `exa-tools` rows, restore the 0.3.1 package, and start. 0.3.1 has no `dsh-exa/tools` export, so leaving a row behind makes those presets broken. Keeping 0.4.0 while deleting the rows leaves every preset without Exa tools. Neither partial state is a valid resting point. `~/.dsh/exa-manager.json` keeps its schema in both directions, so no data migration is needed.
 
 ## Compatibility
 
@@ -34,6 +113,8 @@ The package supports the entire DeepSeek Harness `0.2.1` line: every `0.2.1-*` p
 
 The range admits prereleases because the lower bound carries the `-0` comparator, and it stops before the next patch line because the upper bound is `<0.2.2-0`. It accepts `0.2.1-alpha.1` through `0.2.1-rc.5`, any later `0.2.1-*` prerelease, and `0.2.1`; it rejects `0.2.0-rc.2`, `0.2.2-alpha.1`, and `0.3.0`. The host evaluates ranges with `includePrerelease: true` and npm evaluates them by default; this range produces the same decisions under both.
 
+The entry split does not change the compatibility range, the peer dependencies, or the runtime dependencies.
+
 ## Configuration
 
 | Variable | Role |
@@ -44,6 +125,8 @@ The range admits prereleases because the lower bound carries the `-0` comparator
 The environment that launches `dsh` owns its variables read-only. A read-only key cannot be changed from the card; the card says so and disables value, order, replacement, and deletion controls. Its active state is local manager metadata, so it can still be toggled from the card. Editable keys live in the provider-managed credential store and can be managed from the card or in `~/.dsh/.credentials.yaml`.
 
 The card is registered in the `plugins.bundle.config` slot under the key `dsh-exa`, so it appears on the **Plugins → dsh-exa** bundle page between the description and the row list. It is not a sidebar entry, a chat card, or a standalone page.
+
+The card governs the key list and the routing strategy for the whole profile. It does not decide which agents receive the Exa tools: that follows from the `dsh-exa/tools` row of each preset. Disabling the Host `dsh-exa` row removes the card and the `/api/exa-manager` route; the tools rows in the presets stay mounted and keep working from the shared credential store and manager state.
 
 ## Tools
 
@@ -111,6 +194,8 @@ Only active keys participate. An inactive key keeps its list position, so toggli
 
 The card does not reorder keys from `costDollars`. Only an explicit user action changes the order.
 
+A round-robin cursor belongs to one mounted tools entry, which means one preset revision. Sessions that share a preset share that cursor; different presets start from their own first call, so their first calls may select the same key. Rebuilding a preset revision or restarting the Harness resets the affected cursors. The strategy, key order, active flags, and 402 records come from the shared credential list and `~/.dsh/exa-manager.json`, so a strategy change or a 402 applies to every preset at its next call.
+
 ## Key states
 
 Each configured key has a local active flag stored in `~/.dsh/exa-manager.json` under its non-secret fingerprint. A key with no stored flag is active by default. The card renders the flag as a clickable **Active** or **Inactive** tag in the key row, and shows why and when an inactive key was deactivated. Toggling the flag is a user-only management action; it changes manager state rather than credentials, so it works for keys supplied read-only by the launching environment.
@@ -133,15 +218,17 @@ Each Exa response still carries `costDollars` for the individual request. The to
 - `EXA_API_KEYS` is authoritative. The card does not merge `EXA_API_KEY` back into the list, which would resurrect a removed key. A delete that would fall back to an inherited read-only primary is refused with an explanation.
 - The management route is served by the local DSH web server. This package does not add CORS headers or a second server.
 - Key management, reveal, replacement, deletion, ordering, and active-state toggles are user-only card operations. They are not exposed as Agent tools.
+- The tools entry exposes no HTTP surface, so mounting it in a preset cannot add a route. Each mounted tools entry re-reads credentials per call and shares the manager state file; it keeps no key copy of its own.
 
 ## Package layout
 
 | Path | Role |
 | --- | --- |
-| `src/index.js` | Host entry, service injection, owning-fiber lifecycle |
+| `src/index.js` | Host entry: management route, Client card carrier, startup credential check |
+| `src/tools-entry.js` | Preset entry: three tools and the `tool:exa` prompt section |
 | `src/tools.js` | Three tool definitions, validation, request mapping, projections, render |
 | `src/exa-client.js` | Exa HTTP transport, active-key failover, 402 deactivation |
-| `src/key-manager.js` | Credential reads/writes, key metadata and active state, primary synchronization |
+| `src/key-manager.js` | Credential reads/writes, key metadata and active state, primary synchronization, missing-key check |
 | `src/backend.js` | `/api/exa-manager`, including key active-state changes |
 | `src/lib.js` | Pure parsing, masking, active-key ordering, URL/date validation |
 | `src/state.js` | Non-secret manager state, including active flags |
@@ -150,44 +237,36 @@ Each Exa response still carries `costDollars` for the individual request. The to
 | `locale/en.json`, `locale/zh.json` | Plugin metadata and the card dictionaries used by the build |
 | `scripts/build-client.mjs` | Inject the dictionaries and emit the module-loader bundle |
 
+`package.json` maps the bare package name to `./src/index.js` and the `./tools` subpath to `./src/tools-entry.js`. Both resolve from the same installed directory; the profile needs no second dependency.
+
 ## Development
 
 ```bash
 node scripts/build-client.mjs   # build lib/client.js
+npm run check                   # syntax-check every source entry
 node --test                    # unit and lifecycle tests
-node --check src/client.js      # syntax check the factory source
 ```
 
-For local development, either run the package manager to install the declared DSH dev dependencies, or link the three DSH packages into `node_modules/@deepseek-ai` from the installation's `node_modules`. The tests use an in-memory credential service, a temporary `DSH_HOME`, and a mock `fetch`; they do not call Exa or consume credits.
+For local development, either run the package manager to install the declared DSH dev dependencies, or link the two DSH packages into `node_modules/@deepseek-ai` from the installation's `node_modules`. The tests use an in-memory credential service, a temporary `DSH_HOME`, and a mock `fetch`; they do not call Exa or consume credits.
 
 The client build replaces the `__UI_DICTS__` placeholder inside `factory` with the `card` dictionaries from the two locale files, checks that their key sets match, wraps the factory in `window.__ModuleLoader__.load`, and runs `node --check` on the output. Editing `lib/client.js` directly is overwritten by the next build.
 
+Test files follow the entry split: `test/host.test.js` mounts the Host entry and asserts that it registers one route and no tools or prompt sections; `test/tools-entry.test.js` mounts the preset entry, asserts three tools and one section with no route, and checks that two mounted entries keep independent round-robin cursors while sharing a 402 deactivation.
+
 ## Verification
 
-Functional verification was performed on 2026-10-29 against DSH `0.2.1-rc.3` in the Web profile. The compatibility change was verified on 2026-10-31 against DSH `0.2.1-rc.5`.
+The checks below were run on 2026-11-02 against DSH `0.2.1-rc.5` in the Web profile. See [docs/verification.md](./docs/verification.md) for commands, outputs, and limits.
 
-- The 0.3.0 bundle was removed and reinstalled from `/home/andyk/.dsh-local-plugins/dsh-exa`; `remove_bundle` and `install_bundle` both reported `application: applied` and `changed: true`, package version `0.3.0`, with no warnings.
-- The Host tool catalog contains exactly three new native tools: `exa_search`, `exa_search_advanced`, and `exa_fetch`. Existing `web_search` and `web_fetch` remain present; this package registers no web provider and does not touch `ctx.web`.
-- The client slot `plugins.bundle.config` has an active `dsh-exa` occupant.
-- `GET /api/exa-manager` returned HTTP 200 with `content-type: application/json` and `cache-control: no-store`. The payload reported two configured keys, both active, priority routing, `activeCount: 2`, `inactiveCount: 0`, and `allInactive: false`, with masked key values only.
-- `POST /api/exa-manager` with `action: setKeyActive` and an unknown id returned HTTP 404 `key_not_found`; a follow-up GET still reported both keys active, confirming that the new action is live and that the probe did not change state.
-- A PTC dispatch of `exa_search` with an empty query reached the registered tool and returned `ToolCallError: query must be a non-empty string`, confirming that the installed tool is callable through the PTC surface.
-- `node --test` passes 69 test cases across pure helpers, request mapping, failover, active-key filtering, round-robin cursor behavior, 402 auto-deactivation, all-inactive payment errors, read-only credentials, state permissions, manager actions including `setKeyActive`, client bundle construction and freshness, the manifest compatibility range, the request user agent, and Host mount/unmount lifecycle.
-- On 2026-10-31 the 0.3.1 manifest was evaluated with the `0.2.1-rc.5` app-boot compatibility check and reported no unmet requirements. All ten published `0.2.1` versions (`0.2.1-alpha.1` through `0.2.1-rc.5`), a later `0.2.1-rc.6`, and `0.2.1` satisfy the declared range under both the Host's `includePrerelease: true` evaluation and npm's default semantics; `0.2.0-rc.2`, `0.2.2-0`, `0.2.2-alpha.1`, and `0.3.0` do not. The package was then synchronized into `/home/andyk/.dsh-local-plugins/dsh-exa`, the link target of the profile's `dsh-exa` dependency; the installed manifest was evaluated again with the same rc.5 check and was admitted.
-
-Not verified live:
-
-- Successful calls to the real Exa Search/Contents API were not executed because they consume the configured key's credits and no explicit cost approval was given. Success paths are covered by mock-fetch tests, including schema validation of the canonical outputs.
-- A live HTTP 402 auto-deactivation and the all-inactive lockout were not triggered against the profile because that would consume credits or change the user's key state. Both paths are covered by mock-fetch tests, including the persisted inactive reason and the no-request 402 on the following call.
-- Visual browser verification (light/dark, narrow width, the active-state switch, drag interaction, the Billing button's new tab, console) was not available in this environment. The updated client bundle is on disk and the slot registration is active, but the page was not refreshed or visually inspected in this session. The built bundle was executed with a stub React runtime in tests.
-- A full Harness process restart was not performed, so the 0.3.1 Host code has not been loaded by the running rc.5 process; the Host mount and route checks above were recorded on rc.3 with 0.3.0. Host mount/unmount and route/tool/prompt disposers are covered by tests, and the 0.3.1 changes relative to 0.3.0 are the manifest, the documentation, and the manifest test.
-- No 0.2.1 release other than rc.3 and rc.5 was installed or started. The range decisions for the other releases were evaluated with semver, not by running the Harness on each release.
-
-See [docs/verification.md](./docs/verification.md) for the recorded checks and limits.
+- `node scripts/build-client.mjs`, `npm run check`, and `node --test` pass; the suite runs 79 test cases, including the Host/preset split, independent cursors, shared 402 state, and the package export map.
+- The 0.4.0 checkout was synchronized into `/home/andyk/.dsh-local-plugins/dsh-exa`, the link target of the profile's `dsh-exa` dependency. The installed `package.json` reports `0.4.0`, exports `./tools`, and `lib/client.js` has the same SHA-256 as the checkout.
+- Both entries resolve from the profile base: `dsh-exa` → `src/index.js`, `dsh-exa/tools` → `src/tools-entry.js`.
+- `dsh --profile web --dump-config` composes the `exa-tools` row into `standard-instant`, `ptc-instant`, and `cordis-ptc` only, keeps the single Host `dsh-exa` row, and leaves `chat-assistant` without an Exa row.
+- The running Harness was not restarted in this session. Host mount, tool registration, preset activation, and the Plugins card in a restarted process remain pending restart and are listed as not executed in the verification record.
+- Successful calls to the real Exa Search/Contents API were not executed because they consume the configured key's credits and no explicit cost approval was given.
 
 ## Non-goals
 
-This release intentionally does not include Exa Agent, Research, or `agent_run`; Tavily-style `map` and `crawl` tools; a team credit-balance query; per-key usage history inside the card; automatic key reordering from usage history; a replacement for the built-in web tools; automatic re-enabling of keys after a top-up; automatic disabling of an existing MCP Exa server; or Agent-facing key-management tools.
+This release intentionally does not include Exa Agent, Research, or `agent_run`; Tavily-style `map` and `crawl` tools; a team credit-balance query; per-key usage history inside the card; automatic key reordering from usage history; a replacement for the built-in web tools; automatic re-enabling of keys after a top-up; automatic disabling of an existing MCP Exa server; Agent-facing key-management tools; per-preset API keys or state files; a cross-preset global round-robin cursor; or automatic preset wiring by the bundle.
 
 ## References
 

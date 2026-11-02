@@ -8,7 +8,6 @@
  */
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import { logWarnings, performWithFailover } from './exa-client.js'
-import { collectStoredKeys } from './key-manager.js'
 import {
   finiteNumber,
   finiteNumbers,
@@ -590,6 +589,10 @@ function log(ctx, level, message, ...args) {
 /**
  * Register the three tools and one short system-prompt section. The returned
  * disposer unregisters all of them and is idempotent.
+ *
+ * The missing-key startup warning belongs to the Host management entry, so a
+ * preset that mounts these tools never prints it a second time. A call without
+ * a usable key still fails with the not_configured error from exa-client.js.
  */
 export function installTools(ctx) {
   const disposers = []
@@ -676,17 +679,6 @@ export function installTools(ctx) {
       order: 111,
       text: 'Exa tools are available for semantic web search (exa_search, exa_search_advanced) and reading known URLs (exa_fetch). They are additional to the built-in web_search and web_fetch. Cite returned URLs as markdown links in your answer.',
     }))
-  }
-
-  const credentials = ctx.get('credentials')
-  if (credentials !== undefined && credentials !== null) {
-    collectStoredKeys(credentials).then(({ values }) => {
-      if (values.length === 0) {
-        log(ctx, 'warn', 'dsh-exa: no Exa API key is configured; add one through the Exa card on the Plugins page or set EXA_API_KEYS / EXA_API_KEY')
-      }
-    }).catch((error) => {
-      log(ctx, 'warn', 'dsh-exa: credential check failed: %s', error instanceof Error ? error.message : String(error))
-    })
   }
 
   return function disposeExaTools() {

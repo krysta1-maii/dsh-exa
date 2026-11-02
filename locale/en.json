@@ -4,7 +4,7 @@
     "description": "Semantic web search and URL reading through Exa, with multi-key routing and a Billing shortcut."
   },
   "card": {
-    "summary": "Manage Exa API keys, per-key active state, routing, and a shortcut to Exa Billing. Only active keys are used; the built-in web_search is never replaced.",
+    "summary": "Manage the Exa API keys, per-key active state, and routing shared by every preset, with a shortcut to Exa Billing. Which agents receive the Exa tools is decided by the dsh-exa/tools row of each preset; the built-in web_search is never replaced.",
     "intro": "Exa keys are tried in the order shown, and only keys marked Active participate. Priority mode starts with the first active key every time; round-robin starts with the next active key after the previous call's starting key. A 401 or 429 moves that call to the next active key. A 402 marks that key inactive automatically. When every key is inactive, Exa calls return HTTP 402 (payment required). Built-in web_search is unaffected.",
     "strategy.title": "Key routing",
     "strategy.label": "Routing strategy",
@@ -80,7 +80,8 @@
     "billing.title": "Billing",
     "billing.subtitle": "Your credit balance, invoices, and auto recharge are managed in the Exa dashboard. A key that returns HTTP 402 is disabled automatically; top up here, then re-enable it above. This card does not read or display your balance.",
     "billing.open": "Open Exa Billing",
-    "footer": "Exa search, advanced search, and fetch are additional tools. Built-in web_search and web_fetch keep their existing providers and schemas.",
+    "scope": "This card manages the key list and routing strategy shared by every preset. Agent tools come from the dsh-exa/tools row of a preset, so disabling this Host plugin row removes only this card and the /api/exa-manager route; it does not remove the Exa tools from any preset.",
+    "footer": "Exa search, advanced search, and fetch are additional tools, available only in presets that mount dsh-exa/tools. Built-in web_search and web_fetch keep their existing providers and schemas.",
     "common.saving": "Saving…",
     "common.save": "Save",
     "common.cancel": "Cancel",

@@ -13,6 +13,7 @@ test('package manifest declares the bundle, client, and display resources', () =
   assert.equal(pkg.name, 'dsh-exa')
   assert.equal(pkg.type, 'module')
   assert.equal(pkg.exports['.'], './src/index.js')
+  assert.equal(pkg.exports['./tools'], './src/tools-entry.js')
   assert.equal(pkg.exports['./client'], './lib/client.js')
   assert.equal(pkg.exports['./icon'], './icon.svg')
   assert.equal(pkg.exports['./locale/*.json'], './locale/*.json')
@@ -39,6 +40,23 @@ test('package manifest declares the whole DSH 0.2.1 line', () => {
 test('Exa requests carry the current package version as the user agent', () => {
   const pkg = json('package.json')
   assert.ok(read('src/exa-client.js').includes(`dsh-exa/${pkg.version}`))
+})
+
+test('the package keeps one install with a Host entry and a preset entry', () => {
+  const pkg = json('package.json')
+  assert.equal(pkg.main, './src/index.js')
+  assert.equal(pkg.name, 'dsh-exa')
+  const host = read('src/index.js')
+  const preset = read('src/tools-entry.js')
+  // The Host half owns the management route; the preset half owns the tools.
+  assert.match(host, /installBackend/u)
+  assert.equal(host.includes('installTools'), false)
+  assert.equal(host.includes("from './tools.js'"), false)
+  assert.match(preset, /installTools/u)
+  assert.equal(preset.includes('installBackend'), false)
+  assert.equal(preset.includes("from './backend.js'"), false)
+  assert.match(preset, /export const name = 'dsh-exa-tools'/u)
+  assert.match(preset, /export const inject = \['tools', 'credentials', 'systemPrompt'\]/u)
 })
 
 test('cordis patch inserts exactly one dsh-exa row', () => {
@@ -92,6 +110,7 @@ test('the source client contains the build placeholder and the built bundle repl
 test('all JavaScript source files pass node --check', () => {
   for (const file of [
     'src/index.js',
+    'src/tools-entry.js',
     'src/lib.js',
     'src/state.js',
     'src/key-manager.js',
