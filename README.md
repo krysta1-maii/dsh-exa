@@ -9,8 +9,8 @@ The built-in `web_search` and `web_fetch` tools are not replaced. This package n
 - Package name: `dsh-exa`
 - Host entry: `dsh-exa` (bundle patch row `dsh-exa`)
 - Preset entry: `dsh-exa/tools`
-- Target runtime: DeepSeek Harness 0.2.1-x (every 0.2.1 prerelease and the 0.2.1 release), Node.js 22 or newer
-- Current release: 0.4.0
+- Target runtime: DeepSeek Harness 0.2.1-x and 0.2.2-x (every prerelease and the stable release of both lines), Node.js 22 or newer; DSH 0.2.2 itself requires Node.js 24.9 or newer
+- Current release: 0.4.1
 
 ## Two entries
 
@@ -39,7 +39,7 @@ Build the browser bundle before installing from a checkout:
 node scripts/build-client.mjs
 ```
 
-Install the directory through **Plugins → Add plugin** in the Web UI, or with the equivalent CLI install against the current profile. The bundle is selected and its `dsh-exa` Host row is enabled by `plugin_manager install_bundle`. The package has no install scripts, and its two DSH peers use the `>=0.2.1-0 <0.2.2-0` range described under Compatibility.
+Install the directory through **Plugins → Add plugin** in the Web UI, or with the equivalent CLI install against the current profile. The bundle is selected and its `dsh-exa` Host row is enabled by `plugin_manager install_bundle`. The package has no install scripts, and its two DSH peers use the two-line range described under Compatibility.
 
 The install adds the Host half only. Add the tools entry to each preset that should give its agents the Exa tools. In a preset declaration, place the row next to the existing `tool-web` row so the tool catalog order stays predictable:
 
@@ -102,18 +102,18 @@ Rolling back to 0.3.1 is the same operation in reverse, and it must move both ha
 
 ## Compatibility
 
-The package supports the entire DeepSeek Harness `0.2.1` line: every `0.2.1-*` prerelease and the eventual `0.2.1` release. Earlier and later lines are outside the declared range. The manifest states this in four places.
+The package supports the entire DeepSeek Harness `0.2.1` and `0.2.2` lines: every prerelease and the stable release of both lines. Earlier and later lines are outside the declared range. The manifest states this in four places.
 
 | Field | Value | Role |
 | --- | --- | --- |
-| `engines.dsh` | `>=0.2.1-0 <0.2.2-0` | The admission check DSH runs on install, update, and startup. When present, it decides alone and the DSH peer ranges are ignored. |
+| `engines.dsh` | `>=0.2.1-0 <0.2.2-0 \|\| >=0.2.2-0 <0.2.3-0` | The admission check DSH runs on install, update, and startup. When present, it decides alone and the DSH peer ranges are ignored. |
 | `peerDependencies` | the same range for `@deepseek-ai/dsh-home-paths` and `@deepseek-ai/dsh-tools` | Module contract used by the package-manager toolchain and by hosts that predate `engines.dsh`. |
 | `dsh.compatibility.dsh` | the same range | Descriptive store metadata; the Host does not read it. |
-| `dsh.compatibility.dshReleases` | `0.2.1-rc.3`, `0.2.1-rc.5` | Per-release evidence for the releases actually exercised; the Host does not read it. |
+| `dsh.compatibility.dshReleases` | `0.2.1-rc.3`, `0.2.1-rc.5` | Per-release evidence for the releases actually exercised. The 0.2.2 line is covered by the declared range but has no exercised release entry yet. The Host does not read it. |
 
-The range admits prereleases because the lower bound carries the `-0` comparator, and it stops before the next patch line because the upper bound is `<0.2.2-0`. It accepts `0.2.1-alpha.1` through `0.2.1-rc.5`, any later `0.2.1-*` prerelease, and `0.2.1`; it rejects `0.2.0-rc.2`, `0.2.2-alpha.1`, and `0.3.0`. The host evaluates ranges with `includePrerelease: true` and npm evaluates them by default; this range produces the same decisions under both.
+The range admits prereleases in both lines because each lower bound carries the `-0` comparator, and it stops before the next patch line with `<0.2.2-0` and `<0.2.3-0`. It accepts every `0.2.1-*` prerelease and `0.2.1`, every `0.2.2-*` prerelease and `0.2.2`; it rejects `0.2.0-rc.2`, `0.2.3-alpha.1`, and `0.3.0`. The host evaluates ranges with `includePrerelease: true` and npm evaluates them by default; this range produces the same decisions under both.
 
-The entry split does not change the compatibility range, the peer dependencies, or the runtime dependencies.
+The 0.4.1 compatibility expansion does not change the entry split or the runtime dependencies; the two DSH peer ranges change with `engines.dsh`.
 
 ## Configuration
 
@@ -255,7 +255,7 @@ Test files follow the entry split: `test/host.test.js` mounts the Host entry and
 
 ## Verification
 
-The checks below were run on 2026-11-02 against DSH `0.2.1-rc.5` in the Web profile, including the post-restart acceptance. See [docs/verification.md](./docs/verification.md) for the acceptance checklist and limits.
+The 0.4.0 checks below were run on 2026-11-02 against DSH `0.2.1-rc.5` in the Web profile, including the post-restart acceptance. The 0.4.1 change only expands the declared compatibility range and bumps the package version; `npm run check` and `node --test` were run on 2026-11-03 against the same `0.2.1-rc.5` baseline. DSH `0.2.2-alpha.3` was not executed, and the installed plugin was not modified. See [docs/verification.md](./docs/verification.md) for both records and their limits.
 
 - `node scripts/build-client.mjs`, `npm run check`, and `node --test` pass; the suite runs 79 test cases, including the Host/preset split, independent cursors, shared 402 state, and the package export map.
 - The 0.4.0 checkout was synchronized into `/home/andyk/.dsh-local-plugins/dsh-exa`, the link target of the profile's `dsh-exa` dependency. The installed `package.json` reports `0.4.0`, exports `./tools`, and `lib/client.js` has the same SHA-256 as the checkout.
@@ -266,7 +266,7 @@ The checks below were run on 2026-11-02 against DSH `0.2.1-rc.5` in the Web prof
 
 ## Documentation
 
-The document map, status, and maintenance conventions are in [docs/README.md](./docs/README.md). The current acceptance record is [docs/verification.md](./docs/verification.md); the 0.4.0 architecture rationale is [docs/preset-separation-upgrade-plan.md](./docs/preset-separation-upgrade-plan.md).
+The document map, status, and maintenance conventions are in [docs/README.md](./docs/README.md). The current record is [docs/verification.md](./docs/verification.md): its 0.4.1 section records the compatibility declaration, and its 0.4.0 section records the last runtime acceptance. The 0.4.0 architecture rationale is [docs/preset-separation-upgrade-plan.md](./docs/preset-separation-upgrade-plan.md).
 
 ## Non-goals
 

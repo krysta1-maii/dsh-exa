@@ -148,7 +148,7 @@ export async function callExaOperation(path, body, key, { signal, timeoutMs = 60
       'content-type': 'application/json',
       accept: 'application/json',
       authorization: 'Bearer ' + key,
-      'user-agent': 'dsh-exa/0.4.0',
+      'user-agent': 'dsh-exa/0.4.1',
     },
     body: JSON.stringify(body),
     signal,

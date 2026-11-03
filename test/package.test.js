@@ -27,9 +27,9 @@ test('package manifest declares the bundle, client, and display resources', () =
   assert.match(pkg.engines.node, />=22/u)
 })
 
-test('package manifest declares the whole DSH 0.2.1 line', () => {
+test('package manifest declares the DSH 0.2.1 and 0.2.2 lines', () => {
   const pkg = json('package.json')
-  const range = '>=0.2.1-0 <0.2.2-0'
+  const range = '>=0.2.1-0 <0.2.2-0 || >=0.2.2-0 <0.2.3-0'
   assert.equal(pkg.engines.dsh, range)
   assert.equal(pkg.dsh.compatibility.dsh, range)
   assert.equal(pkg.peerDependencies['@deepseek-ai/dsh-home-paths'], range)

@@ -1,12 +1,43 @@
-# Verification record — dsh-exa 0.4.0
+# Verification record — dsh-exa 0.4.1
 
-Date: 2026-11-02 (0.4.0 entry split), Asia/Hong_Kong
-Runtime: DeepSeek Harness 0.2.1-rc.5, Web profile
-Install target: `/home/andyk/.dsh-local-plugins/dsh-exa`
+Date: 2026-11-03 (0.4.1 compatibility declaration), Asia/Hong_Kong
+Runtime: DeepSeek Harness 0.2.1-rc.5 for the executed checks; 0.2.2-alpha.3 declared but not executed
+Install target: `/home/andyk/.dsh-local-plugins/dsh-exa` (unchanged; the installed package remains 0.4.0)
 
-The 0.4.0 section comes first. The sections from `## 0.3.1 history` onward are the 0.3.0/0.3.1 record, kept unchanged.
+The 0.4.1 section comes first. The 0.4.0 section follows; the sections from `## 0.3.1 history` onward are the 0.3.0/0.3.1 record, kept unchanged.
 
-Status: the 0.4.0 acceptance was completed on 2026-11-02 after the Harness restart. The outcomes matched the design expectations. Real Exa Search/Contents calls remain unexecuted.
+Status: 0.4.1 expands the declared DSH range to the 0.2.1 and 0.2.2 lines and bumps the package version. The executed checks ran on DSH `0.2.1-rc.5`. No DSH 0.2.2 runtime, browser pass, or real Exa call was executed, and the installed plugin was not modified.
+
+## 0.4.1 compatibility declaration (2026-11-03)
+
+The package now declares `>=0.2.1-0 <0.2.2-0 || >=0.2.2-0 <0.2.3-0` in `engines.dsh`, `dsh.compatibility.dsh`, and the two DSH peer ranges. The version is 0.4.1, and the Exa request user agent follows it. No runtime source logic changed; the only source edit is the user-agent string.
+
+Changed files:
+
+- `package.json`: version 0.4.1; `engines.dsh`, `dsh.compatibility.dsh`, and the two DSH peer ranges expanded to the two-line range.
+- `src/exa-client.js`: user agent updated to `dsh-exa/0.4.1`.
+- `test/package.test.js`: the manifest test name and expected range updated.
+- `README.md`, `docs/README.md`, and this record: compatibility text, target runtime, and status updated.
+
+### Automated checks
+
+```bash
+npm run check
+node --test
+```
+
+Results:
+
+- `npm run check` passed for every source entry.
+- `node --test` ran 79 test cases: 79 passed, 0 failed, 0 skipped.
+- The range was evaluated separately with semver 7.8.5: it accepts `0.2.1-alpha.1` through `0.2.1`, and `0.2.2-alpha.0` through `0.2.2`, under both `includePrerelease: true` and the default npm semantics; it rejects `0.2.0-rc.2`, `0.2.3-alpha.1`, and `0.3.0`.
+- The tests use a temporary `DSH_HOME`, an in-memory credential service, and a mock `fetch`. No Exa request was made.
+
+### Not executed
+
+- DSH `0.2.2-alpha.3` was not installed or started. The compatibility expansion is a declaration plus the static API audit recorded in the previous review; it is not a 0.2.2 runtime acceptance.
+- The checkout was not synchronized to the install target. The installed package remains 0.4.0 on DSH `0.2.1-rc.5`, per the release instruction.
+- No browser visual pass and no real Exa Search/Contents call were performed.
 
 ## 0.4.0 entry split (2026-11-02)
 
