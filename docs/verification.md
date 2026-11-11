@@ -1,12 +1,100 @@
-# Verification record — dsh-exa 0.4.1
+# Verification record — dsh-exa 0.4.2
 
-Date: 2026-11-03 (0.4.1 compatibility declaration), Asia/Hong_Kong
-Runtime: DeepSeek Harness 0.2.1-rc.5 for the executed checks; 0.2.2-alpha.3 declared but not executed
-Install target: `/home/andyk/.dsh-local-plugins/dsh-exa` (unchanged; the installed package remains 0.4.0)
+Date: 2026-11-11 (0.4.2 DSH 0.2.2-rc.2 source check); 2026-11-03 (0.4.1 compatibility declaration, then installation), Asia/Hong_Kong
+Runtime: DeepSeek Harness 0.2.2-rc.2 source at `ddac9676` for the 0.4.2 check; 0.2.1-rc.5 for the 0.4.1 declaration checks; 0.2.2-alpha.3 for the 0.4.1 installation and live checks
+Install target: `/home/andyk/.dsh-local-plugins/dsh-exa` (0.4.1 as of 2026-11-03 23:12 HKT; the 0.4.2 checkout was not installed)
 
-The 0.4.1 section comes first. The 0.4.0 section follows; the sections from `## 0.3.1 history` onward are the 0.3.0/0.3.1 record, kept unchanged.
+The 0.4.2 source-check section comes first, then the 0.4.1 installation and compatibility declaration, then the 0.4.0 record; the sections from `## 0.3.1 history` onward are the 0.3.0/0.3.1 record, kept unchanged.
 
-Status: 0.4.1 expands the declared DSH range to the 0.2.1 and 0.2.2 lines and bumps the package version. The executed checks ran on DSH `0.2.1-rc.5`. No DSH 0.2.2 runtime, browser pass, or real Exa call was executed, and the installed plugin was not modified.
+Status: 0.4.2 fixes three declaration-layer items found by the DSH `0.2.2-rc.2` compatibility review and bumps the package version. The runtime code is unchanged except for the user-agent version string. The rc.2 checks read the pinned source and exercised the manifest, tools, bundle patch, and client bundle; rc.2 was not installed or booted as a whole because it is not published.
+
+## 0.4.2 DSH 0.2.2-rc.2 source check (2026-11-11)
+
+Version 0.4.2 closes the three declaration items found by the rc.2 compatibility review. It changes no runtime logic; the only source edit is the Exa request user agent.
+
+### Changes
+
+- `package.json`: version 0.4.2; the `@deepseek-ai/cordis` peer widened from `~4.0.5` to `>=4.0.5 <5.0.0`; development dependencies moved to the published `0.2.2-rc.1` packages with cordis `4.1.0`; `dsh.compatibility.dshReleases` records `0.2.2-rc.2` as `source-checked`.
+- `src/exa-client.js`: the user agent is `dsh-exa/0.4.2`.
+- `test/package.test.js`: expectations cover the cordis peer range, the third release entry, and its `source-checked` value.
+- `README.md`, `docs/README.md`, and this record: compatibility and status text updated.
+
+### Method
+
+The checks read the pinned rc.2 tree at tag `dsh-v0.2.2-rc.2` (commit `ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c`) through Git objects, without switching the working tree. Module-level checks ran with the repository's `tsx` against that commit's TypeScript source: the manifest admission function, `defineTool`, the output-schema validator, the bundle-patch composer, and a browser-side bundle load through a fake `window.__ModuleLoader__` and React.
+
+### Results
+
+| Check | Outcome |
+| --- | --- |
+| Admission | `evaluatePluginCompatibility` accepted `0.2.2-rc.2` with no unmet requirement; `0.2.3-alpha.1` was rejected by `engines.dsh` |
+| Tools | The three rc.2 `defineTool` definitions built; `assertSupportedJsonSchema` accepted each output schema; stubbed executions passed argument validation; `validateJsonSchemaValue` reported no violations; each `render` returned a text block |
+| Bundle patch | rc.2's `composeEntries` turned `cordis.patch.yml` into exactly one row, `{"id":"dsh-exa","name":"dsh-exa"}` |
+| Client bundle | The built bundle registered id `dsh-exa`, injected `slots` and `locale`, registered the zh/en `dshExa` dictionaries, and occupied `plugins.bundle.config` with key `dsh-exa` and `locale: dshExa`; the summary and page views both returned |
+| Build | `node scripts/build-client.mjs` produced 41,310 characters identical to the committed `lib/client.js` |
+| Checks and tests | `npm run check` passed; `node --test` ran 79 cases, all passing |
+
+### Limits
+
+- DSH `0.2.2-rc.2` is not published; at 2026-11-11 22:50 HKT the newest npm version was `0.2.2-rc.1`. No install, update, or whole-machine Web boot was executed against rc.2, and the development dependencies therefore use `0.2.2-rc.1`.
+- The local monorepo's built `lib` artifacts predate the rc.2 source (for example, `packages/boot/app-boot/lib/index.js` lacks the `bundlePatchPaths` function present in the rc.2 source), so they were not treated as an rc.2 runtime.
+- No browser visual pass and no real Exa Search or Contents call were executed; the Exa request mapping remains covered by the mocks.
+
+## 0.4.1 installation on 0.2.2-alpha.3 (2026-11-03)
+
+The link target was synchronized from the checkout, then the bundle was removed and installed again so the running profile replaced its modules. The installed package reports 0.4.1, and the live profile serves the management route and the Plugins card from the new files.
+
+### Source preparation
+
+```bash
+node scripts/build-client.mjs
+npm run check
+node --test
+```
+
+- The build rewrote `lib/client.js` (41,310 characters) and left the working tree unchanged, so the checkout bundle was already current.
+- `npm run check` passed for all nine source entries.
+- `node --test` ran 79 cases: 79 passed, 0 failed, 0 skipped. The suite used a temporary `DSH_HOME`, an in-memory credential service, and a mock `fetch`; no Exa request was made.
+
+### Synchronization
+
+The previous 0.4.0 installation was archived to `.tmp/dsh-exa-install-backup-0.4.0-20261103T2305.tgz` before synchronization, and the profile's `package.json`, `cordis.patch.yml`, and `pnpm-lock.yaml` were copied to `*.bak-before-exa-0.4.1-20261103T2310` in the profile directory.
+
+```bash
+rsync -a --delete --exclude .git --exclude node_modules --exclude dist --exclude .tmp \
+  /home/andyk/projects-dsh/dsh-exa/ /home/andyk/.dsh-local-plugins/dsh-exa/
+```
+
+A second run with `--dry-run` reported no differences. The installed copies of `package.json`, `lib/client.js`, and `src/exa-client.js` have the same SHA-256 values as the checkout (`c1237cb9…`, `a49f6d95…`, `15b30959…`), and the installed `package.json` reports version `0.4.1`, `main: ./src/index.js`, `exports['./tools']: ./src/tools-entry.js`, and the two-line DSH range.
+
+### Bundle replacement
+
+`install_bundle` against the same directory first answered `already-installed`, because the profile dependency already names the package. The update therefore followed the removal-and-installation path that the plugin manager documents for a new version.
+
+| Operation | Result |
+| --- | --- |
+| `remove_bundle` `dsh-exa` | `changed: true`, `application: applied`, pnpm exit 0, no warnings |
+| `install_bundle` `/home/andyk/.dsh-local-plugins/dsh-exa` | `changed: true`, `application: applied`, bundle version `0.4.1`, pnpm exit 0, no warnings |
+
+The profile diff against the backups contains one change: `dsh-exa` moved to the end of `dsh.profile.bundles`, after `dsh-opencode-go`, because enabling appends the bundle. The profile patch and the lockfile are byte-identical. The bundle's patch inserts uniquely named rows (`dsh-exa`), so the new position changes no row resolution; `dsh --profile web --dump-config` exited 0 with one Host `dsh-exa` row, three `dsh-exa/tools` rows under `standard-instant`, `ptc-instant`, and `cordis-ptc`, and no composition error.
+
+The profile dependency remains `link:/home/andyk/.dsh-local-plugins/dsh-exa`, and the profile's `node_modules/dsh-exa` symlink resolves to that directory. `createRequire` from the profile base resolves the package root to `src/index.js`, `dsh-exa/tools` to `src/tools-entry.js`, and `dsh-exa/client` to `lib/client.js`.
+
+### Live checks
+
+| Check | Outcome |
+| --- | --- |
+| `include:dsh-exa` in the profile entry list | `enabled: true`, `fiberPhase: active`, patch id `dsh-exa` |
+| `GET /api/exa-manager` on the running server | HTTP 200, `{"ok":true,…}` with the two configured keys as masked active entries |
+| Client slot `plugins.bundle.config` key `dsh-exa` | Occupant present and active, registered by the newly loaded client module |
+| Preset rows | Composed for the three target presets; no broken-preset or duplicate-route diagnostic appeared |
+
+### Limits
+
+- No real Exa Search or Contents request was made, so the update did not spend credits; request mapping and error paths remain covered by the mocks.
+- The card was verified through its live slot registration, not through a rendered browser screenshot; light, dark, and narrow layouts were not re-checked.
+- Existing sessions keep the preset modules they mounted at creation. The tool entry was confirmed to resolve and compose, and the 0.4.0 acceptance remains the record for per-preset tool presentation; this update changed no tool code.
+- The running instance is a single Web profile on `0.2.2-alpha.3`; other DSH releases in the declared range were not started for this installation.
 
 ## 0.4.1 compatibility declaration (2026-11-03)
 
@@ -35,8 +123,8 @@ Results:
 
 ### Not executed
 
-- DSH `0.2.2-alpha.3` was not installed or started. The compatibility expansion is a declaration plus the static API audit recorded in the previous review; it is not a 0.2.2 runtime acceptance.
-- The checkout was not synchronized to the install target. The installed package remains 0.4.0 on DSH `0.2.1-rc.5`, per the release instruction.
+- At declaration time, DSH `0.2.2-alpha.3` was not installed or started; the compatibility expansion was a declaration plus the static API audit recorded in the previous review. The later installation section above executed 0.4.1 on `0.2.2-alpha.3`; that execution covers installation, live route, and slot registration, not a full per-preset tool acceptance.
+- At declaration time, the checkout was not synchronized to the install target and the installed package remained 0.4.0. The installation section above supersedes that state.
 - No browser visual pass and no real Exa Search/Contents call were performed.
 
 ## 0.4.0 entry split (2026-11-02)

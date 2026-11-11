@@ -34,7 +34,9 @@ test('package manifest declares the DSH 0.2.1 and 0.2.2 lines', () => {
   assert.equal(pkg.dsh.compatibility.dsh, range)
   assert.equal(pkg.peerDependencies['@deepseek-ai/dsh-home-paths'], range)
   assert.equal(pkg.peerDependencies['@deepseek-ai/dsh-tools'], range)
-  assert.deepEqual(Object.keys(pkg.dsh.compatibility.dshReleases), ['0.2.1-rc.3', '0.2.1-rc.5'])
+  assert.equal(pkg.peerDependencies['@deepseek-ai/cordis'], '>=4.0.5 <5.0.0')
+  assert.deepEqual(Object.keys(pkg.dsh.compatibility.dshReleases), ['0.2.1-rc.3', '0.2.1-rc.5', '0.2.2-rc.2'])
+  assert.equal(pkg.dsh.compatibility.dshReleases['0.2.2-rc.2'], 'source-checked')
 })
 
 test('Exa requests carry the current package version as the user agent', () => {

@@ -10,7 +10,7 @@ The built-in `web_search` and `web_fetch` tools are not replaced. This package n
 - Host entry: `dsh-exa` (bundle patch row `dsh-exa`)
 - Preset entry: `dsh-exa/tools`
 - Target runtime: DeepSeek Harness 0.2.1-x and 0.2.2-x (every prerelease and the stable release of both lines), Node.js 22 or newer; DSH 0.2.2 itself requires Node.js 24.9 or newer
-- Current release: 0.4.1
+- Current release: 0.4.2
 
 ## Two entries
 
@@ -107,13 +107,13 @@ The package supports the entire DeepSeek Harness `0.2.1` and `0.2.2` lines: ever
 | Field | Value | Role |
 | --- | --- | --- |
 | `engines.dsh` | `>=0.2.1-0 <0.2.2-0 \|\| >=0.2.2-0 <0.2.3-0` | The admission check DSH runs on install, update, and startup. When present, it decides alone and the DSH peer ranges are ignored. |
-| `peerDependencies` | the same range for `@deepseek-ai/dsh-home-paths` and `@deepseek-ai/dsh-tools` | Module contract used by the package-manager toolchain and by hosts that predate `engines.dsh`. |
+| `peerDependencies` | the same range for `@deepseek-ai/dsh-home-paths` and `@deepseek-ai/dsh-tools`; `@deepseek-ai/cordis` is `>=4.0.5 <5.0.0` | Module contract used by the package-manager toolchain and by hosts that predate `engines.dsh`. The cordis range spans the 4.0.5 of the 0.2.1 line and the 4.1.0 of the 0.2.2 line. |
 | `dsh.compatibility.dsh` | the same range | Descriptive store metadata; the Host does not read it. |
-| `dsh.compatibility.dshReleases` | `0.2.1-rc.3`, `0.2.1-rc.5` | Per-release evidence for the releases actually exercised. The 0.2.2 line is covered by the declared range but has no exercised release entry yet. The Host does not read it. |
+| `dsh.compatibility.dshReleases` | `0.2.1-rc.3`, `0.2.1-rc.5` (`compatible`); `0.2.2-rc.2` (`source-checked`) | Per-release evidence. `compatible` marks a release exercised in a running profile; `source-checked` marks API and admission checks against the pinned source without a whole-machine boot. The Host does not read it. |
 
 The range admits prereleases in both lines because each lower bound carries the `-0` comparator, and it stops before the next patch line with `<0.2.2-0` and `<0.2.3-0`. It accepts every `0.2.1-*` prerelease and `0.2.1`, every `0.2.2-*` prerelease and `0.2.2`; it rejects `0.2.0-rc.2`, `0.2.3-alpha.1`, and `0.3.0`. The host evaluates ranges with `includePrerelease: true` and npm evaluates them by default; this range produces the same decisions under both.
 
-The 0.4.1 compatibility expansion does not change the entry split or the runtime dependencies; the two DSH peer ranges change with `engines.dsh`.
+The 0.4.2 update widens the cordis peer range to cover both lines, moves the test baseline to the published 0.2.2-rc.1 packages, and records the rc.2 source check. It does not change the entry split, the runtime source, or the two DSH peer ranges.
 
 ## Configuration
 
@@ -255,18 +255,19 @@ Test files follow the entry split: `test/host.test.js` mounts the Host entry and
 
 ## Verification
 
-The 0.4.0 checks below were run on 2026-11-02 against DSH `0.2.1-rc.5` in the Web profile, including the post-restart acceptance. The 0.4.1 change only expands the declared compatibility range and bumps the package version; `npm run check` and `node --test` were run on 2026-11-03 against the same `0.2.1-rc.5` baseline. DSH `0.2.2-alpha.3` was not executed, and the installed plugin was not modified. See [docs/verification.md](./docs/verification.md) for both records and their limits.
+The 0.4.1 package was installed on 2026-11-03 and is what the Web profile loads, running DSH `0.2.2-alpha.3`. Its declaration checks ran on DSH `0.2.1-rc.5`; the earlier 0.4.0 acceptance was also run on `0.2.1-rc.5` and remains the record for per-preset tool presentation. Version 0.4.2 adds no runtime change: it records a source-level check against DSH `0.2.2-rc.2` (tag `dsh-v0.2.2-rc.2`), and that release was not booted as a whole because it is not published. See [docs/verification.md](./docs/verification.md) for each record and its limits.
 
-- `node scripts/build-client.mjs`, `npm run check`, and `node --test` pass; the suite runs 79 test cases, including the Host/preset split, independent cursors, shared 402 state, and the package export map.
-- The 0.4.0 checkout was synchronized into `/home/andyk/.dsh-local-plugins/dsh-exa`, the link target of the profile's `dsh-exa` dependency. The installed `package.json` reports `0.4.0`, exports `./tools`, and `lib/client.js` has the same SHA-256 as the checkout.
+- `node scripts/build-client.mjs`, `npm run check`, and `node --test` pass; the suite runs 79 test cases, including the Host/preset split, independent cursors, shared 402 state, and the package export map. The 0.4.2 checks ran with the 0.2.2-rc.1 development packages; the rc.2 checks ran against the pinned source with `tsx`.
+- The 0.4.1 checkout was synchronized into `/home/andyk/.dsh-local-plugins/dsh-exa`, the link target of the profile's `dsh-exa` dependency, then replaced through `remove_bundle` and `install_bundle`; both operations reported `applied`. The installed `package.json` reports `0.4.1`, exports `./tools`, and `lib/client.js` has the same SHA-256 as the checkout.
 - Both entries resolve from the profile base: `dsh-exa` → `src/index.js`, `dsh-exa/tools` → `src/tools-entry.js`.
 - `dsh --profile web --dump-config` composes the `exa-tools` row into `standard-instant`, `ptc-instant`, and `cordis-ptc` only, keeps the single Host `dsh-exa` row, and leaves `chat-assistant` without an Exa row.
-- The post-restart acceptance was completed on 2026-11-02. The Host row registered exactly one `/api/exa-manager` route; the Plugins card and its scope note rendered; `standard-instant`, `ptc-instant`, and `cordis-ptc` exposed the three tools in native or PTC form; `minimal`, `chat-assistant`, `standard`, `ptc`, and `cordis` exposed none; subagents followed the parent or explicitly selected preset; and disabling the Host row removed only the card and route. The outcomes matched the design expectations.
+- In the running profile, `include:dsh-exa` is active, `GET /api/exa-manager` answers HTTP 200 with the masked key list, and the `plugins.bundle.config` slot for `dsh-exa` is occupied by the reloaded client module.
+- The post-restart acceptance of the tool presentation was completed on 2026-11-02 against `0.2.1-rc.5`. The Host row registered exactly one `/api/exa-manager` route; the Plugins card and its scope note rendered; `standard-instant`, `ptc-instant`, and `cordis-ptc` exposed the three tools in native or PTC form; `minimal`, `chat-assistant`, `standard`, `ptc`, and `cordis` exposed none; subagents followed the parent or explicitly selected preset; and disabling the Host row removed only the card and route. The outcomes matched the design expectations.
 - Successful calls to the real Exa Search/Contents API were not executed because they consume the configured key's credits and no explicit cost approval was given.
 
 ## Documentation
 
-The document map, status, and maintenance conventions are in [docs/README.md](./docs/README.md). The current record is [docs/verification.md](./docs/verification.md): its 0.4.1 section records the compatibility declaration, and its 0.4.0 section records the last runtime acceptance. The 0.4.0 architecture rationale is [docs/preset-separation-upgrade-plan.md](./docs/preset-separation-upgrade-plan.md).
+The document map, status, and maintenance conventions are in [docs/README.md](./docs/README.md). The current record is [docs/verification.md](./docs/verification.md): its 0.4.2 section records the rc.2 source check, its 0.4.1 sections record the installation and compatibility declaration, and its 0.4.0 section records the last runtime acceptance. The 0.4.0 architecture rationale is [docs/preset-separation-upgrade-plan.md](./docs/preset-separation-upgrade-plan.md).
 
 ## Non-goals
 
